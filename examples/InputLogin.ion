@@ -1,0 +1,18 @@
+begin program
+
+    declare usuario_correto: string := "admin"
+    declare senha_correta: string := "senha@123"
+    
+    declare nome: string
+    declare senha: string
+    
+    nome := input("Usuário: ")
+    senha := input("Senha: ")
+    
+    if (nome == usuario_correto and senha == senha_correta) then
+        display "Login bem-sucedido. Bem-vindo, admin!"
+    else
+        display "Credenciais inválidas."
+    endif
+
+end program

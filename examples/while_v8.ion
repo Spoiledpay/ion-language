@@ -1,0 +1,13 @@
+begin program
+    display "--- Teste Loop While V8 ---"
+
+    declare x: number := 0
+
+    while x < 5 do
+        display "x = ", x
+        x := x + 1
+    end do
+
+    display "Loop 'while' concluído. x final = ", x
+
+end program

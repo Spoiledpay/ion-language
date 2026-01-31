@@ -1,0 +1,14 @@
+begin program
+    
+    declare senha_secreta: string := "ion123"
+    declare tentativa: string
+    
+    tentativa := input("Digite a senha: ")
+    
+    if tentativa == senha_secreta then
+        display "Acesso concedido!"
+    else
+        display "Acesso negado."
+    endif
+
+end program

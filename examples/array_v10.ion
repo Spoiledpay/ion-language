@@ -1,0 +1,22 @@
+begin program
+    display "--- Teste de Array V10 ---"
+
+    // 1. Declaração do array (para Brainfuck)
+    declare tape: [number](10) // Um tape de 10 células
+
+    // 2. Atribuição de índice (Escrita)
+    tape[3] := 123
+    tape[4] := 987
+
+    // 3. Leitura de índice
+    display "Tape[3]: ", tape[3]
+    display "Tape[4]: ", tape[4]
+
+    // 4. Verificando o valor padrão (deve ser nil ou 0)
+    display "Tape[0]: ", tape[0]
+
+    // 5. Teste com variável de índice
+    declare i: number := 3
+    display "Tape[i]: ", tape[i]
+
+end program

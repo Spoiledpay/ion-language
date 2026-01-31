@@ -1,0 +1,44 @@
+#compilar seu código-fonte##
+
+ionc.exe -s examples/test.ion -o examples/test.ionc
+ionc.exe -s examples/Hello.ion -o examples/Hello.ionc
+ionc.exe -s examples/math_test_v3.ion -o examples/math_test_v3.ionc
+ionc.exe -s examples/types_v4.ion -o examples/types_v4.ionc
+ionc.exe -s examples/input_v6.ion -o examples/input_v6.ionc
+ionc.exe -s examples/logic_v7.ion -o examples/logic_v7.ionc
+ionc.exe -s examples/InputLogin.ion -o examples/InputLogin.ionc
+ionc.exe -s examples/InputOperador.ion -o examples/InputOperador.ionc
+ionc.exe -s examples/InputSenha.ion -o examples/InputSenha.ionc
+ionc.exe -s examples/while_v8.ion -o examples/while_v8.ionc
+ionc.exe -s examples/function_v9.ion -o examples/function_v9.ionc
+ionc.exe -s examples/array_v10.ion -o examples/array_v10.ionc
+ionc.exe -s examples/brainfuck_io_v11.ion -o examples/brainfuck_io_v11.ionc
+ionc.exe -s examples/diff_v12.ion -o examples/diff_v12.ionc
+ionc.exe -s examples/stringlib_v12.ion -o examples/stringlib_v12.ionc
+ionc.exe -s examples/if_regression_test.ion -o examples/if_regression_test.ionc
+ionc.exe -s examples/v13_sanity_test.ion -o examples/v13_sanity_test.ionc
+ionc.exe -s examples/scope_test_v15.ion -o examples/scope_test_v15.ionc
+ionc.exe -s examples/brainfuck.ion -o examples/brainfuck.ionc
+ionc.exe -s examples/ascii_test.ion -o examples/ascii_test.ionc
+
+
+#executar o bytecode ###
+ionv.exe examples/test.ionc
+ionv.exe examples/Hello.ionc
+ionv.exe examples/math_test_v3.ionc
+ionv.exe examples/types_v4.ionc
+ionv.exe examples/input_v6.ionc
+ionv.exe examples/logic_v7.ionc
+ionv.exe examples/InputLogin.ionc
+ionv.exe examples/InputOperador.ionc
+ionv.exe examples/InputSenha.ionc
+ionv.exe examples/while_v8.ionc
+ionv.exe examples/function_v9.ionc
+ionv.exe examples/array_v10.ionc
+ionv.exe examples/brainfuck_io_v11.ionc
+ionv.exe examples/diff_v12.ionc
+ionv.exe examples/stringlib_v12.ionc
+ionv.exe examples/v13_sanity_test.ionc
+ionv.exe examples/scope_test_v15.ionc
+ionv.exe examples/brainfuck.ionc
+ionv.exe examples/ascii_test.ionc

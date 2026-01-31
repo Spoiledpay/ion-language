@@ -1,0 +1,46 @@
+begin program
+    display "--- Teste de Escopo (V15) ---"
+
+    // 1. Variável no Escopo Principal (Main)
+    declare x: number := 10
+    display "1. Main: x (deve ser 10): ", x
+
+    // 2. Teste de Escopo de Bloco (O bug do Brainfuck)
+    if x == 10 then
+        // 'y' só deve existir dentro deste bloco
+        declare y: number := 20
+        display "2. Bloco 'if', y (deve ser 20): ", y
+        
+        x := 15 // Modifica a variável do escopo externo
+    endif
+
+    display "3. Main: x (deve ser 15): ", x
+
+    // 4. Teste de "Vazamento" de Escopo
+    // Se o 'y' (do bloco 'if') "vazou", esta linha
+    // irá falhar (se usarmos 'declare y') ou
+    // irá imprimir '20' (se o bug V13 ainda existir).
+    
+    // Vamos declarar uma nova variável 'z' em um loop
+    declare i: number := 0
+    while i < 2 do
+        declare z: number := 100 + i
+        display "4. Bloco 'while', z (deve ser 100 ou 101): ", z
+        i := i + 1
+    end do
+    
+    // 5. Teste de Escopo de Função
+    function TestScope(a)
+        display "5. Função 'TestScope' (a=50): ", a
+        
+        // 6. Teste de 'Shadowing' (Sombreamento)
+        // Esta variável 'x' é local para TestScope
+        declare x: number := 99
+        display "6. Função 'TestScope' (x local=99): ", x
+    end function
+
+    TestScope(50)
+    
+    display "7. Main: x (deve ser 15): ", x // 'x' deve ser 15, não 99
+
+end program

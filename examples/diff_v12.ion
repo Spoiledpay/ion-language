@@ -1,0 +1,12 @@
+begin program
+    display "--- Teste Diferente V12 ---"
+
+    if 10 != 5 then
+        display "10 != 5 (Correto)"
+    endif
+
+    if "hello" != "hello" then
+        display "ERRO: 'hello' != 'hello' (Incorreto)"
+    endif
+
+end program

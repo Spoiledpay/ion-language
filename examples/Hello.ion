@@ -1,0 +1,15 @@
+begin program
+    
+    declare nome: string := "Ion"
+    declare versao: number := 1
+    declare i: number
+
+    display "Iniciando..."
+
+    for i = 1 to 5 step 1
+        display "Contador: ", i
+    next
+
+    display "Finalizado por ", nome, " v", versao
+
+end program

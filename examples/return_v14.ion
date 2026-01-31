@@ -1,0 +1,17 @@
+begin program
+    display "--- Teste de Return V14 ---"
+
+    function add(a, b)
+        return a + b
+
+        display "ISTO NÃO DEVE APARECER"
+    end function
+
+    // Teste 1: Chamada dentro de uma expressão
+    declare soma: number := add(5, 10)
+    display "5 + 10 = ", soma // 15
+
+    // Teste 2: Chamada aninhada
+    display "add(3, 8) * 2 = ", add(3, 8) * 2 // 22
+
+end program

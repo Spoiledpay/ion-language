@@ -1,0 +1,66 @@
+begin program
+    display "--- Interpretador Brainfuck em Ion (Corrigido) ---"
+    
+    // O programa Brainfuck (Olá Mundo!)
+    declare bf_code: string := "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
+    declare code_len: number := len(bf_code)
+    
+    // A 'fita' e os ponteiros
+    declare tape: [number](30000)
+    declare tape_ptr: number := 0
+    declare code_ptr: number := 0
+    
+    declare cmd: number // O comando atual (ASCII)
+    
+    // --- CORREÇÃO: Variáveis movidas para o topo ---
+    declare loop_count: number
+    declare next_cmd: number
+    declare prev_cmd: number
+    // --- FIM DA CORREÇÃO ---
+    
+    display "Iniciando execução do BF..."
+    
+    while code_ptr < code_len do
+        cmd := get_byte_at(bf_code, code_ptr)
+        
+        // ... (comandos >, <, +, -, ., ,) ...
+        
+        // [ (91) (loop)
+        if (cmd == 91 and tape[tape_ptr] == 0) then
+            // Pula para o ']' correspondente
+            loop_count := 1 // <-- MUDANÇA: Usa atribuição (:=)
+            while loop_count > 0 do
+                code_ptr := code_ptr + 1
+                next_cmd := get_byte_at(bf_code, code_ptr) // <-- MUDANÇA: Usa atribuição (:=)
+                if next_cmd == 91 then
+                    loop_count := loop_count + 1
+                endif
+                if next_cmd == 93 then
+                    loop_count := loop_count - 1
+                endif
+            end do
+        endif
+        
+        // ] (93) (loop)
+        if (cmd == 93 and tape[tape_ptr] != 0) then
+            // Pula de volta para o '[' correspondente
+            loop_count := 1 // <-- MUDANÇA: Usa atribuição (:=)
+            while loop_count > 0 do
+                code_ptr := code_ptr - 1
+                prev_cmd := get_byte_at(bf_code, code_ptr) // <-- MUDANÇA: Usa atribuição (:=)
+                if prev_cmd == 91 then
+                    loop_count := loop_count - 1
+                endif
+                if prev_cmd == 93 then
+                    loop_count := loop_count + 1
+                endif
+            end do
+        endif
+
+        code_ptr := code_ptr + 1
+    end do
+    
+    display ""
+    display "Execução do BF concluída."
+
+end program

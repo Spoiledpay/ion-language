@@ -1,0 +1,25 @@
+begin program
+    display "--- Teste de I/O de Caractere (V11) ---"
+
+    // Teste 1: char(number)
+    display "char(65) é: ", char(65) // "A"
+    display "char(97) é: ", char(97) // "a"
+
+    // Teste 2: ord()
+    display "Digite um caractere e pressione Enter: "
+    declare val: number := ord()
+
+    display "O código ASCII é: ", val
+
+    // Teste 3: Loop de Eco
+    display "Iniciando loop de eco (Digite 'q' para sair)"
+    declare ch: number := 0
+
+    while ch != 113 do // 113 é o ASCII para 'q'
+        ch := ord()
+        display "Eco: ", char(ch)
+    end do
+
+    display "Fim."
+
+end program

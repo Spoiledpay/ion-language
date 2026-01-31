@@ -1,0 +1,21 @@
+begin program
+
+    declare versao: number := 2
+
+    if versao == 2 then
+        display "Bem-vindo ao Ion v2!"
+    else
+        display "Versão antiga detectada."
+    endif
+
+    declare x: number := 10
+
+    if x > 5 then
+        display "x é maior que 5"
+    endif
+
+    if x < 5 then
+        display "Isso não deve aparecer"
+    endif
+
+end program

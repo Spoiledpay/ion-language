@@ -1,0 +1,22 @@
+begin program
+    display "--- Teste Tabela ASCII (0-255) ---"
+
+    declare i: number
+    
+    // O loop 'for' (V1) irá de 0 a 255
+    for i = 0 to 255 step 1
+        
+        // Usamos 'if' (V2) e 'or' (V7) para pular
+        // caracteres que quebram a linha (10 = Newline, 13 = Carriage Return)
+        // para manter a formatação da saída.
+        
+        if (i == 10 or i == 13) then
+            // Não faz nada (pula)
+        else
+            // Usamos 'char()' (V11) para converter 'i'
+            display "Codigo: ", i, " | Char: '", char(i), "'"
+        endif
+    
+    next
+
+end program

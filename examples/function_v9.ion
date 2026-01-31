@@ -1,0 +1,13 @@
+begin program
+    display "--- Teste de Funções V9 ---"
+
+    // Declaração da Função
+    function Saudacao(nome)
+        display "Olá, ", nome
+    end function
+
+    // Chamada da Função
+    Saudacao("Ion")
+    Saudacao("Mundo")
+
+end program

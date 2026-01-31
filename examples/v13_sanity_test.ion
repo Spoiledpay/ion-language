@@ -1,0 +1,35 @@
+begin program
+    display "--- Teste V13: Escopo Local e Arrays ---"
+    
+    // 1. Declarar todos os tipos (V13)
+    // (Isso testa se 'declare' aumenta a pilha corretamente)
+    declare varNum: number := 111
+    declare varStr: string := "aaa"
+    declare varBool: boolean := true
+    declare varNil: number := nil // (Testa nil)
+    
+    // 2. Declarar Array (V10)
+    // (Testa se o array é inicializado com 0s)
+    declare meuArray: [number](5)
+    
+    // 3. Atribuição de Array (V10)
+    // (Testa OP_SET_INDEX)
+    meuArray[0] := 222
+    
+    // 4. Re-atribuição de Local (V13.3)
+    // (Testa se 'OP_SET_LOCAL' + 'OP_POP' funciona)
+    varNum := 333
+    
+    // 5. Verificação de Corrupção de Pilha
+    // (O 'display' usa a pilha; se a pilha estiver corrompida,
+    // os valores abaixo serão impressos incorretamente)
+    display "--- Verificação ---"
+    
+    display "Numero (deve ser 333): ", varNum
+    display "String (deve ser 'aaa'): ", varStr
+    display "Booleano (deve ser true): ", varBool
+    display "Nulo (deve ser nil): ", varNil
+    display "Array[0] (deve ser 222): ", meuArray[0]
+    display "Array[1] (deve ser 0): ", meuArray[1] // (Padrão do V13.1)
+
+end program

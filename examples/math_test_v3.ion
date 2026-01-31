@@ -1,0 +1,17 @@
+begin program
+    display "--- Teste de Matemática V3 ---"
+
+    declare a: number := 10 * 2
+    display "10 * 2 = ", a
+
+    declare b: number := 100 / 4
+    display "100 / 4 = ", b
+    
+    declare c: number := b - a  // 25 - 20
+    display "25 - 20 = ", c
+    
+    display "Teste de Precedência (5 + 2 * 10):"
+    declare d: number := 5 + 2 * 10 // Deve ser 25 (2*10 + 5)
+    display d
+
+end program

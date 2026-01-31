@@ -1,0 +1,13 @@
+begin program
+
+    declare resposta: string
+    
+    resposta := input("Deseja continuar? (sim/s): ")
+    
+    if (resposta == "sim" or resposta == "s") then
+        display "Continuando..."
+    else
+        display "Operação cancelada."
+    endif
+
+end program

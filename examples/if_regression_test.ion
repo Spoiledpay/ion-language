@@ -1,0 +1,35 @@
+begin program
+    display "--- Teste de Regressão IF (V13.6) ---"
+
+    // Teste 1: if/else (caminho THEN)
+    if true then
+        display "1: Bloco THEN (Correto)"
+    else
+        display "1: Bloco ELSE (ERRO)"
+    endif
+
+    // Teste 2: if/else (caminho ELSE)
+    if false then
+        display "2: Bloco THEN (ERRO)"
+    else
+        display "2: Bloco ELSE (Correto)"
+    endif
+
+    // Teste 3: if (caminho THEN)
+    if true then
+        display "3: Bloco THEN (Correto)"
+    endif
+
+    // Teste 4: if (caminho pulado)
+    if false then
+        display "4: Bloco THEN (ERRO)"
+    endif
+    
+    // Teste 5: Verificação de pilha (se os pops falharem, esta variável será corrompida)
+    declare x: number := 100
+    if 1 == 1 then
+        declare y: number := 1
+    endif
+    display "5: Verificação de Pilha: ", x // Deve ser 100
+
+end program

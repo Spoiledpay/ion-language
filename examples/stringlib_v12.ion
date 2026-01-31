@@ -1,0 +1,17 @@
+begin program
+    display "--- Teste de String Lib V12.B ---"
+
+    declare texto: string := "Ola, Ion!"
+
+    // Teste 1: len()
+    display "Texto: ", texto
+    display "Comprimento: ", len(texto) // 9
+
+    declare lista: [number](5)
+    display "Comprimento Array: ", len(lista) // 5
+
+    // Teste 2: get_byte_at()
+    display "char 0 (O): ", get_byte_at(texto, 0) // 79
+    display "char 5 (I): ", get_byte_at(texto, 5) // 73
+
+end program

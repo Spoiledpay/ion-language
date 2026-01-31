@@ -1,0 +1,13 @@
+begin program
+
+    display "Iniciando..."
+
+    declare nome: string := input("Qual o seu nome? ")
+
+    display "Olá, ", nome, "! Bem-vindo ao Ion V6."
+
+    declare idade_str: string := input("Quantos anos você tem? ")
+
+    display nome, " tem ", idade_str, " anos."
+
+end program

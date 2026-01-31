@@ -1,0 +1,28 @@
+begin program
+
+    // 1. Teste de boolean e literais
+    declare completo: boolean := false
+    display "Completo: ", completo // false
+
+    if completo == false then
+        display "Ainda não está completo."
+    endif
+
+    completo := true
+    display "Agora: ", completo // true
+
+    // 2. Teste de nil
+    declare usuario: string := nil
+
+    if usuario == nil then
+        display "Usuário é nulo."
+        usuario := "Visitante"
+    endif
+
+    display "Usuário: ", usuario // Visitante
+
+    // 3. Teste de valor padrão
+    declare flag: boolean
+    display "Flag padrão: ", flag // false
+
+end program

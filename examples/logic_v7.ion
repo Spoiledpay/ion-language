@@ -1,0 +1,28 @@
+begin program
+    display "--- Testes Lógicos V7 ---"
+
+    // Teste 1: not
+    display "not true: ", not(true)   // false
+    display "not nil: ", not(nil)     // true
+
+    // Teste 2: and (curto-circuito)
+    display "true and false: ", (true and false) // false
+
+    // Teste 3: or (curto-circuito)
+    display "true or false: ", (true or false)   // true
+    display "false or true: ", (false or true)  // true
+
+    // Teste 4: Combinado
+    declare idade: number := 25
+    declare cnh: boolean := true
+
+    if (idade > 18 and not(cnh == false)) then
+        display "Pode dirigir."
+    endif
+
+    declare dia: string := "sabado"
+    if (dia == "sabado" or dia == "domingo") then
+        display "Fim de semana!"
+    endif
+
+end program
