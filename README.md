@@ -1,4 +1,5 @@
-# 💎 Ion Language v1.13
+# <img width="334" height="181" alt="IonLogoSmall" src="https://github.com/user-attachments/assets/4a7ac0e7-0c37-486e-9c43-566a8880e0bd" />
+ Ion Language v1.13
 
 Ion é uma linguagem de programação didática, com tipagem estática e execução baseada em **Bytecode** através de uma Máquina Virtual (VM) customizada, desenvolvida inteiramente em Go.
 
@@ -68,4 +69,5 @@ echo Gerando binarios do Ion...
 go build -o ionc.exe ./ionc
 go build -o ionv.exe ./ionv
 echo Concluido! ionc.exe e ionv.exe criados.
+
 
