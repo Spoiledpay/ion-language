@@ -1,0 +1,15 @@
+begin program
+    display "--- Teste For com Step Opcional ---"
+
+    declare i: number
+
+    for i = 1 to 5 step 1
+        display "Com step: ", i
+    next
+
+    for i = 1 to 3
+        display "Sem step: ", i
+    next
+
+    display "Fim"
+end program

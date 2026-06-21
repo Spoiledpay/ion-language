@@ -1,0 +1,3 @@
+begin program
+    declare x: number := "string"   // Erro: tipo incompatível
+end program

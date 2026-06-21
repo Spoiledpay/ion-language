@@ -1,0 +1,5 @@
+begin program
+    declare x: number := 10
+    declare s: string := "texto"
+    x += s  /* Erro: number += string */
+end program

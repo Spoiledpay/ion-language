@@ -1,0 +1,46 @@
+begin program
+    display "=== Teste de Map (dicionário) ==="
+    declare idade: [string]number := map[string]number
+    idade["João"] := 30
+    idade["Maria"] := 25
+    idade["Pedro"] := 40
+
+    display "Idade de João: ", idade["João"]
+    display "Idade de Maria: ", idade["Maria"]
+    display "Idade de Pedro: ", idade["Pedro"]
+
+    idade["João"] := idade["João"] + 1
+    display "João fez aniversário: ", idade["João"]
+
+    display ""
+    display "=== Teste de Lista Dinâmica ==="
+    declare nums: list[number] := list[number]
+    append(nums, 10)
+    append(nums, 20)
+    append(nums, 30)
+    append(nums, 40)
+    display "nums[0] = ", nums[0]
+    display "nums[1] = ", nums[1]
+    display "nums[2] = ", nums[2]
+    display "nums[3] = ", nums[3]
+
+    declare ultimo: number := pop(nums)
+    display "pop() retornou: ", ultimo
+    display "lista agora tem 3 elementos"
+
+    remove(nums, 0)
+    display "remove(nums, 0) - novo nums[0] = ", nums[0]
+
+    display ""
+    display "=== Teste de Loop com Lista ==="
+    declare i: number := 0
+    declare soma: number := 0
+    while i < nums[0] do
+        soma += i
+        i += 1
+    end do
+    display "soma = ", soma
+
+    display ""
+    display "Todos os testes concluídos com sucesso!"
+end program

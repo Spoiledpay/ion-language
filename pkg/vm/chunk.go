@@ -33,15 +33,14 @@ func (c *Chunk) WriteChunk(b byte, line int) {
 	c.Lines = append(c.Lines, line)
 }
 
-// AddConstant adiciona um valor à piscina de constantes.
-// Retorna o índice onde o valor foi armazenado.
-// Se o valor já existir, apenas retorna o índice (otimização futura).
+// AddConstant adiciona um valor à piscina de constantes com deduplicação.
 func (c *Chunk) AddConstant(val Value) int {
-	// TODO: Otimização futura - verificar se a constante já existe
-	// antes de adicionar.
-
+	for i, existing := range c.Constants {
+		if val.Type == existing.Type && val.As == existing.As {
+			return i
+		}
+	}
 	c.Constants = append(c.Constants, val)
-	// Retorna o índice do valor que acabamos de adicionar
 	return len(c.Constants) - 1
 }
 

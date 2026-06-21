@@ -6,33 +6,30 @@ type Lexer struct {
 	readPosition int    // Próxima posição de leitura (depois do char atual)
 	ch           byte   // O caractere atual sendo examinado
 	line         int    // Linha atual (para erros)
-	column       int    // Coluna atual (para erros)
+	column       int    // Coluna atual (para erros) - 1-indexed, reflete l.ch
 }
 
 // New cria um novo Lexer.
 func New(input string) *Lexer {
-	l := &Lexer{input: input, line: 1, column: 1}
-	l.readChar() // Inicializa o lexer lendo o primeiro char
+	l := &Lexer{input: input, line: 1, column: 0}
+	l.readChar()
 	return l
 }
 
 // readChar lê o próximo caractere e avança as posições.
 func (l *Lexer) readChar() {
 	if l.readPosition >= len(l.input) {
-		// Chegamos ao fim do arquivo (End of File)
-		l.ch = 0 // 0 é o byte nulo (ASCII), sinaliza EOF
+		l.ch = 0
 	} else {
 		l.ch = l.input[l.readPosition]
 	}
 	l.position = l.readPosition
 	l.readPosition++
 
-	// Atualiza linha/coluna para rastreamento de erro
+	l.column++
 	if l.ch == '\n' {
 		l.line++
-		l.column = 1
-	} else {
-		l.column++
+		l.column = 0
 	}
 }
 
@@ -50,99 +47,119 @@ func (l *Lexer) NextToken() Token {
 
 	l.skipWhitespace()
 
-	// Salva a posição inicial do token
 	startLine := l.line
 	startColumn := l.column
 
 	switch l.ch {
 	case '=':
-		// --- LÓGICA ATUALIZADA ---
-		// Verifica se é '=='
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			literal := string(ch) + string(l.ch)
-			tok = Token{Type: TOKEN_EQUAL_EQUAL, Literal: literal, Line: startLine, Column: startColumn - 1}
+			tok = Token{Type: TOKEN_EQUAL_EQUAL, Literal: string(ch) + string(l.ch), Line: startLine, Column: startColumn}
 		} else {
-			tok = l.newToken(TOKEN_EQUALS, l.ch, startLine, startColumn-1)
+			tok = l.newToken(TOKEN_EQUALS, l.ch, startLine, startColumn)
 		}
 	case ':':
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			literal := string(ch) + string(l.ch)
-			tok = Token{Type: TOKEN_ASSIGN, Literal: literal, Line: startLine, Column: startColumn - 1}
+			tok = Token{Type: TOKEN_ASSIGN, Literal: string(ch) + string(l.ch), Line: startLine, Column: startColumn}
 		} else {
-			tok = l.newToken(TOKEN_COLON, l.ch, startLine, startColumn-1)
+			tok = l.newToken(TOKEN_COLON, l.ch, startLine, startColumn)
 		}
 	case ',':
-		tok = l.newToken(TOKEN_COMMA, l.ch, startLine, startColumn-1)
+		tok = l.newToken(TOKEN_COMMA, l.ch, startLine, startColumn)
 	case '>':
-
-		tok = l.newToken(TOKEN_GREATER, l.ch, startLine, startColumn-1)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = Token{Type: TOKEN_GREATER_EQUAL, Literal: ">=", Line: startLine, Column: startColumn}
+		} else {
+			tok = l.newToken(TOKEN_GREATER, l.ch, startLine, startColumn)
+		}
 	case '<':
-
-		tok = l.newToken(TOKEN_LESS, l.ch, startLine, startColumn-1)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = Token{Type: TOKEN_LESS_EQUAL, Literal: "<=", Line: startLine, Column: startColumn}
+		} else {
+			tok = l.newToken(TOKEN_LESS, l.ch, startLine, startColumn)
+		}
 	case '+':
-		tok = l.newToken(TOKEN_PLUS, l.ch, startLine, startColumn-1)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = Token{Type: TOKEN_PLUS_ASSIGN, Literal: "+=", Line: startLine, Column: startColumn}
+		} else {
+			tok = l.newToken(TOKEN_PLUS, l.ch, startLine, startColumn)
+		}
 	case '-':
-		tok = l.newToken(TOKEN_MINUS, l.ch, startLine, startColumn-1)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = Token{Type: TOKEN_MINUS_ASSIGN, Literal: "-=", Line: startLine, Column: startColumn}
+		} else {
+			tok = l.newToken(TOKEN_MINUS, l.ch, startLine, startColumn)
+		}
 	case '*':
-		tok = l.newToken(TOKEN_ASTERISK, l.ch, startLine, startColumn-1)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = Token{Type: TOKEN_ASTERISK_ASSIGN, Literal: "*=", Line: startLine, Column: startColumn}
+		} else {
+			tok = l.newToken(TOKEN_ASTERISK, l.ch, startLine, startColumn)
+		}
 	case '/':
-		tok = l.newToken(TOKEN_SLASH, l.ch, startLine, startColumn-1)
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = Token{Type: TOKEN_SLASH_ASSIGN, Literal: "/=", Line: startLine, Column: startColumn}
+		} else {
+			tok = l.newToken(TOKEN_SLASH, l.ch, startLine, startColumn)
+		}
+	case '%':
+		tok = l.newToken(TOKEN_PERCENT, l.ch, startLine, startColumn)
 	case '!':
 		if l.peekChar() == '=' {
 			ch := l.ch
 			l.readChar()
-			literal := string(ch) + string(l.ch)
-			tok = Token{Type: TOKEN_NOT_EQUAL, Literal: literal, Line: startLine, Column: startColumn - 1}
+			tok = Token{Type: TOKEN_NOT_EQUAL, Literal: string(ch) + string(l.ch), Line: startLine, Column: startColumn}
 		} else {
-			// (Se não for '!=', '!' sozinho é ilegal)
-			tok = l.newToken(TOKEN_ILLEGAL, l.ch, startLine, startColumn-1)
+			tok = l.newToken(TOKEN_ILLEGAL, l.ch, startLine, startColumn)
 		}
 	case '(':
-		tok = l.newToken(TOKEN_LPAREN, l.ch, startLine, startColumn-1)
+		tok = l.newToken(TOKEN_LPAREN, l.ch, startLine, startColumn)
 	case ')':
-		tok = l.newToken(TOKEN_RPAREN, l.ch, startLine, startColumn-1)
+		tok = l.newToken(TOKEN_RPAREN, l.ch, startLine, startColumn)
 	case '[':
-		tok = l.newToken(TOKEN_LBRACKET, l.ch, startLine, startColumn-1)
+		tok = l.newToken(TOKEN_LBRACKET, l.ch, startLine, startColumn)
 	case ']':
-		tok = l.newToken(TOKEN_RBRACKET, l.ch, startLine, startColumn-1)
+		tok = l.newToken(TOKEN_RBRACKET, l.ch, startLine, startColumn)
 	case '"':
 		tok.Type = TOKEN_STRING_LIT
 		tok.Literal = l.readString()
 		tok.Line = startLine
-		tok.Column = startColumn - 1 // A coluna da aspa inicial
+		tok.Column = startColumn
 	case 0:
 		tok.Literal = ""
 		tok.Type = TOKEN_EOF
 		tok.Line = startLine
-		tok.Column = startColumn - 1
+		tok.Column = startColumn
 	default:
 		if isLetter(l.ch) {
-			// Pode ser um Identificador ou uma Palavra-Chave
 			lit := l.readIdentifier()
-			tok.Type = LookupIdent(lit) // Verifica se é keyword
+			tok.Type = LookupIdent(lit)
 			tok.Literal = lit
 			tok.Line = startLine
-			tok.Column = startColumn - 1
-			return tok // readIdentifier já avançou, então retorne
+			tok.Column = startColumn
+			return tok
 		} else if isDigit(l.ch) {
-			// É um número
 			lit := l.readNumber()
 			tok.Type = TOKEN_NUMBER_LIT
 			tok.Literal = lit
 			tok.Line = startLine
-			tok.Column = startColumn - 1
-			return tok // readNumber já avançou, então retorne
+			tok.Column = startColumn
+			return tok
 		} else {
-			// Não sabemos o que é isso
-			tok = l.newToken(TOKEN_ILLEGAL, l.ch, startLine, startColumn-1)
+			tok = l.newToken(TOKEN_ILLEGAL, l.ch, startLine, startColumn)
 		}
 	}
 
-	l.readChar() // Avança para o próximo caractere
+	l.readChar()
 	return tok
 }
 
@@ -151,17 +168,16 @@ func (l *Lexer) newToken(tokenType TokenType, ch byte, line, col int) Token {
 	return Token{Type: tokenType, Literal: string(ch), Line: line, Column: col}
 }
 
-// skipWhitespace pula espaços em branco, tabulações e quebras de linha.
+// skipWhitespace pula espaços em branco, tabulações, quebras de linha e comentários.
 func (l *Lexer) skipWhitespace() {
-	for { // Loop para consumir múltiplos espaços ou comentários
+	for {
 		if l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
-			// É espaço em branco, consome
 			l.readChar()
 		} else if l.ch == '/' && l.peekChar() == '/' {
-			// É um comentário, pula a linha inteira
 			l.skipComment()
+		} else if l.ch == '/' && l.peekChar() == '*' {
+			l.skipBlockComment()
 		} else {
-			// Não é espaço em branco nem comentário, pare
 			break
 		}
 	}
@@ -170,43 +186,119 @@ func (l *Lexer) skipWhitespace() {
 // readIdentifier lê um identificador ou palavra-chave.
 func (l *Lexer) readIdentifier() string {
 	position := l.position
-	for isLetter(l.ch) {
+	for isLetter(l.ch) || isDigit(l.ch) {
 		l.readChar()
 	}
-	// Permite 'nomes_com_underscore' (mas a V1 não usa)
-	// for isLetter(l.ch) || l.ch == '_' {
-	// 	l.readChar()
-	// }
 	return l.input[position:l.position]
 }
 
-// readNumber lê um literal numérico (apenas inteiros por enquanto).
+// readNumber lê um literal numérico (inteiro, flutuante, hex, bin, octal).
 func (l *Lexer) readNumber() string {
 	position := l.position
-	for isDigit(l.ch) {
+
+	if l.ch == '0' {
+		next := l.peekChar()
+		if next == 'x' || next == 'X' {
+			l.readChar()
+			l.readChar()
+			for isHexDigit(l.ch) {
+				l.readChar()
+			}
+			return l.input[position:l.position]
+		}
+		if next == 'b' || next == 'B' {
+			l.readChar()
+			l.readChar()
+			for l.ch == '0' || l.ch == '1' {
+				l.readChar()
+			}
+			return l.input[position:l.position]
+		}
+		if next == 'o' || next == 'O' {
+			l.readChar()
+			l.readChar()
+			for l.ch >= '0' && l.ch <= '7' {
+				l.readChar()
+			}
+			return l.input[position:l.position]
+		}
+	}
+
+	for isDigit(l.ch) || l.ch == '_' {
 		l.readChar()
 	}
-	// TODO: Adicionar suporte a ponto flutuante (ex: 10.5) se V2 precisar
+
+	if l.ch == '.' {
+		l.readChar()
+		for isDigit(l.ch) || l.ch == '_' {
+			l.readChar()
+		}
+	}
+
+	if l.ch == 'e' || l.ch == 'E' {
+		l.readChar()
+		if l.ch == '+' || l.ch == '-' {
+			l.readChar()
+		}
+		for isDigit(l.ch) {
+			l.readChar()
+		}
+	}
+
 	return l.input[position:l.position]
 }
 
-// readString lê um literal de string (tudo entre aspas duplas).
+func isHexDigit(ch byte) bool {
+	return ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f' || ch >= 'A' && ch <= 'F'
+}
+
+// readString lê um literal de string (tudo entre aspas duplas), processando escapes.
 func (l *Lexer) readString() string {
-	position := l.position + 1 // Pula o " inicial
+	var result []byte
+	terminated := false
+
 	for {
 		l.readChar()
-		if l.ch == '"' || l.ch == 0 {
+		if l.ch == '"' {
+			terminated = true
 			break
 		}
-		// TODO: Adicionar suporte para escapes (ex: \" ou \n)
-	}
-	// Trata o caso de string não terminada
-	if l.ch == 0 {
-		// EOF, mas string não fechou. O Parser vai pegar isso.
-		return "STRING NÃO TERMINADA" // Provisório
+		if l.ch == 0 {
+			break
+		}
+		if l.ch == '\\' {
+			esc := l.peekChar()
+			switch esc {
+			case 'n':
+				result = append(result, '\n')
+				l.readChar()
+			case '"':
+				result = append(result, '"')
+				l.readChar()
+			case '\\':
+				result = append(result, '\\')
+				l.readChar()
+			case 't':
+				result = append(result, '\t')
+				l.readChar()
+			case 'r':
+				result = append(result, '\r')
+				l.readChar()
+			default:
+				result = append(result, '\\', l.ch)
+			}
+		} else {
+			result = append(result, l.ch)
+		}
 	}
 
-	return l.input[position:l.position]
+	if !terminated {
+		return "\x00"
+	}
+	if result == nil {
+		return ""
+	}
+	return string(result)
 }
 
 // --- Funções Auxiliares ---
@@ -221,9 +313,23 @@ func isDigit(ch byte) bool {
 }
 
 func (l *Lexer) skipComment() {
-	// O l.ch atual é o primeiro '/', e o peek é o segundo.
-	// Continua lendo até encontrar a quebra de linha ou o fim do arquivo.
 	for l.ch != '\n' && l.ch != 0 {
+		l.readChar()
+	}
+}
+
+func (l *Lexer) skipBlockComment() {
+	l.readChar() // *
+	l.readChar() // primeiro char depois de /*
+	for {
+		if l.ch == '*' && l.peekChar() == '/' {
+			l.readChar()
+			l.readChar()
+			return
+		}
+		if l.ch == 0 {
+			return
+		}
 		l.readChar()
 	}
 }

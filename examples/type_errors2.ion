@@ -1,0 +1,22 @@
+begin program
+    declare x: number := 10
+    declare y: boolean := true
+    declare s: string := "oi"
+
+    /* Erro: número + string */
+    x := x + s
+
+    /* Erro: if com número */
+    if x then
+        display "erro"
+    endif
+
+    /* Erro: not com string */
+    declare b: boolean := not "texto"
+
+    /* Erro: char com string */
+    declare c: string := char("não número")
+
+    /* Erro: len com número */
+    declare l: number := len(x)
+end program

@@ -1,0 +1,27 @@
+begin program
+    /* Exemplo: contagem regressiva com -= */
+    declare cont: number := 10
+    while cont > 0 do
+        display "Contagem: ", cont
+        cont -= 1
+    end do
+    display "Fim!"
+    display "---"
+
+    /* Exemplo: dobro com *= */
+    declare dobro: number := 1
+    declare i: number := 0
+    for i = 1 to 5 step 1
+        dobro *= 2
+        display "2^", i, " = ", dobro
+    next
+    display "---"
+
+    /* Exemplo: acumulador com += */
+    declare soma: number := 0
+    declare j: number := 1
+    for j = 1 to 10 step 1
+        soma += j
+    next
+    display "Soma 1..10 = ", soma
+end program

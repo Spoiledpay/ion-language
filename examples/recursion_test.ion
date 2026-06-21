@@ -1,0 +1,16 @@
+begin program
+    display "--- Teste de Recursao ---"
+
+    function fatorial(n)
+        if n <= 1 then
+            return 1
+        else
+            return n * fatorial(n - 1)
+        endif
+    end function
+
+    declare resultado: number := fatorial(5)
+    display "Fatorial de 5 = ", resultado
+
+    display "Fim"
+end program

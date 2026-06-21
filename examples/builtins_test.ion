@@ -1,0 +1,26 @@
+begin program
+    display "--- Teste de Built-ins ---"
+
+    declare num: number := 42
+    declare str: string := tostring(num)
+    display "tostring(42) = ", str
+
+    declare n: number := tonumber("3.14")
+    display "tonumber('3.14') = ", n
+
+    declare invalido: number := tonumber("abc")
+    display "tonumber('abc') = ", invalido
+
+    declare conteudo: string := readfile("examples/Hello.ion")
+    if conteudo != nil then
+        display "readfile OK, tamanho: ", len(conteudo)
+    else
+        display "readfile retornou nil"
+    endif
+
+    declare path: string := "examples/test_write.txt"
+    writefile(path, "Hello from Ion!")
+    display "writefile OK"
+
+    display "Fim dos testes de built-ins"
+end program

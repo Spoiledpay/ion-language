@@ -1,5 +1,5 @@
 begin program
-    display "--- Interpretador Brainfuck em Ion (Corrigido) ---"
+    display "--- Interpretador Brainfuck em Ion ---"
     
     // O programa Brainfuck (Olá Mundo!)
     declare bf_code: string := "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
@@ -12,26 +12,17 @@ begin program
     
     declare cmd: number // O comando atual (ASCII)
     
-    // --- CORREÇÃO: Variáveis movidas para o topo ---
-    declare loop_count: number
-    declare next_cmd: number
-    declare prev_cmd: number
-    // --- FIM DA CORREÇÃO ---
-    
     display "Iniciando execução do BF..."
     
     while code_ptr < code_len do
         cmd := get_byte_at(bf_code, code_ptr)
         
-        // ... (comandos >, <, +, -, ., ,) ...
-        
         // [ (91) (loop)
         if (cmd == 91 and tape[tape_ptr] == 0) then
-            // Pula para o ']' correspondente
-            loop_count := 1 // <-- MUDANÇA: Usa atribuição (:=)
+            declare loop_count: number := 1
             while loop_count > 0 do
                 code_ptr := code_ptr + 1
-                next_cmd := get_byte_at(bf_code, code_ptr) // <-- MUDANÇA: Usa atribuição (:=)
+                declare next_cmd: number := get_byte_at(bf_code, code_ptr)
                 if next_cmd == 91 then
                     loop_count := loop_count + 1
                 endif
@@ -43,11 +34,10 @@ begin program
         
         // ] (93) (loop)
         if (cmd == 93 and tape[tape_ptr] != 0) then
-            // Pula de volta para o '[' correspondente
-            loop_count := 1 // <-- MUDANÇA: Usa atribuição (:=)
+            declare loop_count: number := 1
             while loop_count > 0 do
                 code_ptr := code_ptr - 1
-                prev_cmd := get_byte_at(bf_code, code_ptr) // <-- MUDANÇA: Usa atribuição (:=)
+                declare prev_cmd: number := get_byte_at(bf_code, code_ptr)
                 if prev_cmd == 91 then
                     loop_count := loop_count - 1
                 endif

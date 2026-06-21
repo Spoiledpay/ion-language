@@ -1,0 +1,12 @@
+begin program
+    declare x: number := 100
+    display "x inicial: ", x
+    x += 50
+    display "x += 50: ", x
+    x -= 30
+    display "x -= 30: ", x
+    x *= 2
+    display "x *= 2: ", x
+    x /= 4
+    display "x /= 4: ", x
+end program

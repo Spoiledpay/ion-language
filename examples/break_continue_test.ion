@@ -1,0 +1,17 @@
+begin program
+    display "--- Teste Break/Continue ---"
+    declare i: number := 0
+
+    while i < 10 do
+        i := i + 1
+        if i == 3 then
+            continue
+        endif
+        if i == 7 then
+            break
+        endif
+        display "i = ", i
+    end do
+
+    display "Fim. i = ", i
+end program

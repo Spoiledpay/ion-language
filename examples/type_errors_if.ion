@@ -1,0 +1,6 @@
+begin program
+    declare x: number := 10
+    if x then
+        display "x nao e boolean"
+    endif
+end program
