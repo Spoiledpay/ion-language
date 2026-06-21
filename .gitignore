@@ -1,3 +1,6 @@
 *.ionc
 *.exe
 examples/test_write.txt
+.agent/
+Fases.md
+Prompt.txt
