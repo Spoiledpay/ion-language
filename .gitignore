@@ -1,0 +1,3 @@
+*.ionc
+*.exe
+examples/test_write.txt

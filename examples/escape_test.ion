@@ -1,0 +1,14 @@
+begin program
+    /* Teste de escape sequences */
+    declare s1: string := "linha1\nlinha2"
+    declare s2: string := "aspas \" dentro"
+    declare s3: string := "caminho\\arquivo"
+    declare s4: string := "tab\tseparado"
+    declare s5: string := "com\rCR"
+
+    display s1
+    display s2
+    display s3
+    display s4
+    display s5
+end program

@@ -1,0 +1,34 @@
+begin program
+    declare x: number := 10
+    declare y: number := 20
+    declare z: number := 5
+
+    display "x = ", x
+    display "y = ", y
+    display "z = ", z
+    display "---"
+
+    x += 5
+    display "x += 5 -> ", x
+
+    y -= 8
+    display "y -= 8 -> ", y
+
+    z *= 4
+    display "z *= 4 -> ", z
+
+    x /= 3
+    display "x /= 3 -> ", x
+
+    display "---"
+
+    /* Teste encadeado com expressões */
+    declare a: number := 2
+    a += 3 * 2
+    display "a += 3*2 -> ", a
+
+    a *= 2 + 1
+    display "a *= 2+1 -> ", a
+
+    display "Todos os operadores compostos funcionam!"
+end program

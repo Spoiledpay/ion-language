@@ -167,11 +167,12 @@ func (nl *NilLiteral) TokenLiteral() string { return nl.Token.Literal }
 // --- NOVO NÓ DA AST (V5) ---
 
 // AssignmentStatement representa uma re-atribuição de variável
-// Ex: i := 10
+// Ex: i := 10, i += 5
 type AssignmentStatement struct {
-	Token lexer.Token // O token := (ASSIGN)
-	Left  Expression  // O que está sendo atribuído (Identifier ou IndexExpr)
-	Value Expression  // O valor
+	Token    lexer.Token // O token := (ASSIGN) ou +=, -=, *=, /=
+	Left     Expression  // O que está sendo atribuído (Identifier ou IndexExpr)
+	Operator string      // ":=", "+=", "-=", "*=", "/="
+	Value    Expression  // O valor
 }
 
 func (as *AssignmentStatement) statementNode()       {}
@@ -221,12 +222,16 @@ type WhileStatement struct {
 func (ws *WhileStatement) statementNode()       {}
 func (ws *WhileStatement) TokenLiteral() string { return ws.Token.Literal }
 
+type Parameter struct {
+	Name *Identifier
+	Type Expression // pode ser nil se sem tipo
+}
+
 type FunctionStatement struct {
-	Token      lexer.Token   // O token TOKEN_FUNCTION
-	Name       *Identifier   // O nome da função (ex: Saudacao)
-	Parameters []*Identifier // Os parâmetros (ex: nome)
-	// TODO: Precisamos adicionar os tipos dos parâmetros
-	Body []Statement // O corpo da função
+	Token      lexer.Token
+	Name       *Identifier
+	Parameters []Parameter
+	Body       []Statement
 }
 
 func (fs *FunctionStatement) statementNode()       {}
@@ -294,14 +299,30 @@ type CharExpression struct {
 func (ce *CharExpression) expressionNode()      {}
 func (ce *CharExpression) TokenLiteral() string { return ce.Token.Literal }
 
-// OrdExpression representa a chamada da função nativa 'ord()'
-// Implementa a interface 'Expression'.
+// OrdExpression representa a chamada da função nativa 'ord(expr)'
 type OrdExpression struct {
-	Token lexer.Token // O token TOKEN_ORD
+	Token    lexer.Token
+	Argument Expression
 }
 
 func (oe *OrdExpression) expressionNode()      {}
 func (oe *OrdExpression) TokenLiteral() string { return oe.Token.Literal }
+
+// BreakStatement representa a instrução 'break'
+type BreakStatement struct {
+	Token lexer.Token
+}
+
+func (bs *BreakStatement) statementNode()       {}
+func (bs *BreakStatement) TokenLiteral() string { return bs.Token.Literal }
+
+// ContinueStatement representa a instrução 'continue'
+type ContinueStatement struct {
+	Token lexer.Token
+}
+
+func (cs *ContinueStatement) statementNode()       {}
+func (cs *ContinueStatement) TokenLiteral() string { return cs.Token.Literal }
 
 // ... (Depois de OrdExpression)
 
@@ -327,6 +348,52 @@ type GetByteAtExpression struct {
 
 func (gbe *GetByteAtExpression) expressionNode()      {}
 func (gbe *GetByteAtExpression) TokenLiteral() string { return gbe.Token.Literal }
+
+// ToStringExpression representa toString(expr)
+type ToStringExpression struct {
+	Token    lexer.Token
+	Argument Expression
+}
+
+func (tse *ToStringExpression) expressionNode()      {}
+func (tse *ToStringExpression) TokenLiteral() string { return tse.Token.Literal }
+
+// ToNumberExpression representa toNumber(expr)
+type ToNumberExpression struct {
+	Token    lexer.Token
+	Argument Expression
+}
+
+func (tne *ToNumberExpression) expressionNode()      {}
+func (tne *ToNumberExpression) TokenLiteral() string { return tne.Token.Literal }
+
+// ExitStatement representa exit(code)
+type ExitStatement struct {
+	Token    lexer.Token
+	Code Expression
+}
+
+func (es *ExitStatement) statementNode()       {}
+func (es *ExitStatement) TokenLiteral() string { return es.Token.Literal }
+
+// ReadFileExpression representa readFile(path)
+type ReadFileExpression struct {
+	Token lexer.Token
+	Path  Expression
+}
+
+func (rfe *ReadFileExpression) expressionNode()      {}
+func (rfe *ReadFileExpression) TokenLiteral() string { return rfe.Token.Literal }
+
+// WriteFileStatement representa writeFile(path, content)
+type WriteFileStatement struct {
+	Token   lexer.Token
+	Path    Expression
+	Content Expression
+}
+
+func (wfs *WriteFileStatement) statementNode()       {}
+func (wfs *WriteFileStatement) TokenLiteral() string { return wfs.Token.Literal }
 
 // ... (Depois de GetByteAtExpression)
 

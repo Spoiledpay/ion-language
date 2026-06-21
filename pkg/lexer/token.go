@@ -38,6 +38,13 @@ const (
 	TOKEN_DO       TokenType = "DO"    // 'do'
 	TOKEN_FUNCTION TokenType = "FUNCTION"
 	TOKEN_RETURN   TokenType = "RETURN"
+	TOKEN_BREAK      TokenType = "BREAK"
+	TOKEN_CONTINUE   TokenType = "CONTINUE"
+	TOKEN_TO_STRING  TokenType = "TO_STRING"
+	TOKEN_TO_NUMBER  TokenType = "TO_NUMBER"
+	TOKEN_EXIT       TokenType = "EXIT"
+	TOKEN_READ_FILE  TokenType = "READ_FILE"
+	TOKEN_WRITE_FILE TokenType = "WRITE_FILE"
 
 	// --- NOVOS TOKENS V10 (ARRAYS) ---
 	TOKEN_LBRACKET TokenType = "[" // '['
@@ -64,14 +71,21 @@ const (
 	TOKEN_COLON  TokenType = ":"
 	TOKEN_COMMA  TokenType = ","
 
-	TOKEN_PLUS     TokenType = "+"
-	TOKEN_MINUS    TokenType = "-"
-	TOKEN_ASTERISK TokenType = "*"
-	TOKEN_SLASH    TokenType = "/"
+	TOKEN_PLUS         TokenType = "+"
+	TOKEN_PLUS_ASSIGN  TokenType = "+="
+	TOKEN_MINUS        TokenType = "-"
+	TOKEN_MINUS_ASSIGN TokenType = "-="
+	TOKEN_ASTERISK     TokenType = "*"
+	TOKEN_ASTERISK_ASSIGN TokenType = "*="
+	TOKEN_SLASH        TokenType = "/"
+	TOKEN_SLASH_ASSIGN TokenType = "/="
 
-	TOKEN_EQUAL_EQUAL TokenType = "==" // Duplo igual
-	TOKEN_GREATER     TokenType = ">"  // Maior que
-	TOKEN_LESS        TokenType = "<"  // Menor que
+	TOKEN_EQUAL_EQUAL  TokenType = "==" // Duplo igual
+	TOKEN_GREATER      TokenType = ">"  // Maior que
+	TOKEN_GREATER_EQUAL TokenType = ">=" // Maior ou igual
+	TOKEN_LESS         TokenType = "<"  // Menor que
+	TOKEN_LESS_EQUAL   TokenType = "<=" // Menor ou igual
+	TOKEN_PERCENT      TokenType = "%"  // Módulo
 
 	// Palavras-chave da Linguagem (V1)
 	TOKEN_BEGIN       TokenType = "BEGIN"
@@ -124,13 +138,33 @@ var keywords = map[string]TokenType{
 	"len":         TOKEN_LEN,
 	"get_byte_at": TOKEN_GET_BYTE_AT,
 	"return":      TOKEN_RETURN,
+	"break":       TOKEN_BREAK,
+	"continue":    TOKEN_CONTINUE,
+	"tostring":    TOKEN_TO_STRING,
+	"tonumber":    TOKEN_TO_NUMBER,
+	"exit":        TOKEN_EXIT,
+	"readfile":    TOKEN_READ_FILE,
+	"writefile":   TOKEN_WRITE_FILE,
 }
 
 // LookupIdent verifica se um identificador é uma palavra-chave.
 // Se for, retorna o TokenType da palavra-chave.
 // Se não, retorna TOKEN_IDENT.
+func toLower(s string) string {
+	b := make([]byte, len(s))
+	for i := range s {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 32
+		}
+		b[i] = c
+	}
+	return string(b)
+}
+
+// LookupIdent verifica se um identificador é uma palavra-chave (case-insensitive).
 func LookupIdent(ident string) TokenType {
-	if tok, ok := keywords[ident]; ok {
+	if tok, ok := keywords[toLower(ident)]; ok {
 		return tok
 	}
 	return TOKEN_IDENT

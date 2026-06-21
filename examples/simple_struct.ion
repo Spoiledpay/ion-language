@@ -1,0 +1,4 @@
+begin program
+    declare x: number := 10
+    display x
+end program

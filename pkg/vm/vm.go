@@ -7,40 +7,35 @@ import (
 	"strings"
 )
 
-const (
-	STACK_MAX  = 256
-	FRAMES_MAX = 64 // Número máximo de chamadas de função aninhadas
-)
+const DefaultStackMax = 4096
+const DefaultFramesMax = 256
 
-// --- NOVO STRUCT V9 ---
-// CallFrame representa uma única chamada de função em andamento.
 type CallFrame struct {
-	function  *FunctionObject // A função que está sendo chamada
-	ip        int             // O ponteiro de instrução (IP) desta função
-	stackSlot int             // O índice na pilha da VM onde os locais desta função começam
+	function  *FunctionObject
+	ip        int
+	stackSlot int
 }
 
-// --- VM ATUALIZADA V9 ---
 type VM struct {
-	// A Pilha de Chamadas (Call Stack)
-	frames     [FRAMES_MAX]CallFrame
-	frameCount int // Quantos CallFrames estão ativos
+	frames     []CallFrame
+	frameCount int
 
-	// A Pilha de Valores
 	stack    []Value
-	stackTop int // Aponta para o local *acima* do topo
+	stackTop int
 
-	// Variáveis Globais
 	globals map[string]Value
 	reader  *bufio.Reader
 }
 
-// NewVM cria uma nova instância da Máquina Virtual.
 func NewVM() *VM {
+	return NewVMConfig(DefaultStackMax, DefaultFramesMax)
+}
+
+func NewVMConfig(stackMax, framesMax int) *VM {
 	return &VM{
-		frames:     [FRAMES_MAX]CallFrame{},
+		frames:     make([]CallFrame, framesMax),
 		frameCount: 0,
-		stack:      make([]Value, STACK_MAX),
+		stack:      make([]Value, stackMax),
 		stackTop:   0,
 		globals:    make(map[string]Value),
 		reader:     bufio.NewReader(os.Stdin),
@@ -66,21 +61,21 @@ func (vm *VM) Interpret(mainFunction *FunctionObject) error {
 	return vm.Run()
 }
 
-// Run é o loop principal de execução da VM (AGORA USA CALLFRAMES).
-func (vm *VM) Run() error {
-	// Referência para o CallFrame atual
+// Run é o loop principal de execução da VM.
+func (vm *VM) Run() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("Erro Interno da VM: %v", r)
+		}
+	}()
+
 	var frame *CallFrame
 
 	for {
-		// --- LÓGICA DE FRAME ATUALIZADA ---
 		if vm.frameCount == 0 {
-			return nil // Sem frames, programa terminado
+			return nil
 		}
-		frame = &vm.frames[vm.frameCount-1] // Pega o frame do topo
-		// --- FIM DA ATUALIZAÇÃO ---
-
-		// Modo de depuração (opcional):
-		// vm.debugTraceStack()
+		frame = &vm.frames[vm.frameCount-1]
 
 		instruction := vm.readByte(frame)
 		switch instruction {
@@ -196,16 +191,21 @@ func (vm *VM) Run() error {
 
 		// --- NOVOS OPCODES V9 (Locais) ---
 		case byte(OP_GET_LOCAL):
-			// O operando é o índice *relativo* ao início do slot do frame
 			slot := int(vm.readByte(frame))
-			// Nós lemos do slot absoluto da pilha
-			vm.push(vm.stack[frame.stackSlot+slot])
+			absSlot := frame.stackSlot + slot
+			if absSlot < 0 || absSlot >= len(vm.stack) {
+				return vm.runtimeError(frame, "slot local %d fora dos limites", slot)
+			}
+			vm.push(vm.stack[absSlot])
 
 		case byte(OP_SET_LOCAL):
-			// V13.3: Revertido para 'peek'.
-			// 'declare' (que usa SET_LOCAL) deve aumentar a pilha.
 			slot := int(vm.readByte(frame))
-			vm.stack[frame.stackSlot+slot] = vm.peek(0)
+			absSlot := frame.stackSlot + slot
+			if absSlot < 0 || absSlot >= len(vm.stack) {
+				return vm.runtimeError(frame, "slot local %d fora dos limites", slot)
+			}
+			val := vm.peek(0)
+			vm.stack[absSlot] = val
 
 		// --- NOVOS OPCODES V9 (Chamada e Retorno) ---
 		case byte(OP_CALL):
@@ -223,16 +223,18 @@ func (vm *VM) Run() error {
 					function.Arity, argCount)
 			}
 
-			if vm.frameCount == FRAMES_MAX {
+			if vm.frameCount >= len(vm.frames) {
 				return vm.runtimeError(frame, "estouro da pilha de chamadas (stack overflow)")
 			}
 
-			// Prepara o NOVO frame
+			stackSlot := vm.stackTop - argCount - 1
+			if stackSlot < 0 {
+				return vm.runtimeError(frame, "pilha corrompida na chamada de função")
+			}
 			newFrame := &vm.frames[vm.frameCount]
 			newFrame.function = function
 			newFrame.ip = 0
-			// O slot do novo frame começa onde a função (e seus args) estão
-			newFrame.stackSlot = vm.stackTop - argCount - 1
+			newFrame.stackSlot = stackSlot
 
 			vm.frameCount++
 			// O loop 'for' agora usará este novo frame
@@ -287,21 +289,15 @@ func (vm *VM) Run() error {
 			vm.push(NewStringValue(charStr))
 
 		case byte(OP_ORD):
-			// 'ord()' agora usa o leitor bufferizado da VM
-			// e pula os caracteres de quebra de linha.
-			for {
-				inputByte, err := vm.reader.ReadByte()
-				if err != nil {
-					vm.push(NewNilValue()) // EOF
-					break
-				}
-
-				// Ignora \r (13) e \n (10)
-				if inputByte != 13 && inputByte != 10 {
-					vm.push(NewNumberValue(float64(inputByte)))
-					break // Encontramos um caractere válido
-				}
-				// Se for \r ou \n, o loop continua e lê o próximo byte
+			val := vm.pop()
+			if !IsString(val) {
+				return vm.runtimeError(frame, "'ord' requer uma string como argumento")
+			}
+			s := AsString(val)
+			if len(s) == 0 {
+				vm.push(NewNilValue())
+			} else {
+				vm.push(NewNumberValue(float64(s[0])))
 			}
 		case byte(OP_LEN):
 			// Pega a string (ou array) da pilha
@@ -393,6 +389,30 @@ func (vm *VM) Run() error {
 				return vm.runtimeError(frame, "operandos devem ser números para '<'")
 			}
 			vm.push(NewBoolValue(AsNumber(a) < AsNumber(b)))
+		case byte(OP_LESS_EQUAL):
+			b := vm.pop()
+			a := vm.pop()
+			if !IsNumber(a) || !IsNumber(b) {
+				return vm.runtimeError(frame, "operandos devem ser números para '<='")
+			}
+			vm.push(NewBoolValue(AsNumber(a) <= AsNumber(b)))
+		case byte(OP_GREATER_EQUAL):
+			b := vm.pop()
+			a := vm.pop()
+			if !IsNumber(a) || !IsNumber(b) {
+				return vm.runtimeError(frame, "operandos devem ser números para '>='")
+			}
+			vm.push(NewBoolValue(AsNumber(a) >= AsNumber(b)))
+		case byte(OP_MODULO):
+			b := vm.pop()
+			a := vm.pop()
+			if !IsNumber(a) || !IsNumber(b) {
+				return vm.runtimeError(frame, "operandos devem ser números para '%'")
+			}
+			if AsNumber(b) == 0 {
+				return vm.runtimeError(frame, "módulo por zero")
+			}
+			vm.push(NewNumberValue(float64(int(AsNumber(a)) % int(AsNumber(b)))))
 		case byte(OP_EQUAL):
 			b := vm.pop()
 			a := vm.pop()
@@ -432,6 +452,54 @@ func (vm *VM) Run() error {
 			frame.ip -= offset
 
 		// --- Opcodes de Pilha ---
+		case byte(OP_TO_STRING):
+			val := vm.pop()
+			vm.push(NewStringValue(Stringify(val)))
+		case byte(OP_TO_NUMBER):
+			val := vm.pop()
+			if IsNumber(val) {
+				vm.push(val)
+			} else if IsString(val) {
+				s := AsString(val)
+				num, err := fmt.Sscanf(s, "%g", new(float64))
+				if err != nil || num == 0 {
+					vm.push(NewNilValue())
+				} else {
+					var f float64
+					fmt.Sscanf(s, "%g", &f)
+					vm.push(NewNumberValue(f))
+				}
+			} else {
+				vm.push(NewNilValue())
+			}
+		case byte(OP_EXIT):
+			codeVal := vm.pop()
+			code := 0
+			if IsNumber(codeVal) {
+				code = int(AsNumber(codeVal))
+			}
+			os.Exit(code)
+		case byte(OP_READ_FILE):
+			pathVal := vm.pop()
+			if !IsString(pathVal) {
+				return vm.runtimeError(frame, "'readFile' requer uma string como caminho")
+			}
+			data, err := os.ReadFile(AsString(pathVal))
+			if err != nil {
+				vm.push(NewNilValue())
+			} else {
+				vm.push(NewStringValue(string(data)))
+			}
+		case byte(OP_WRITE_FILE):
+			contentVal := vm.pop()
+			pathVal := vm.pop()
+			if !IsString(pathVal) || !IsString(contentVal) {
+				return vm.runtimeError(frame, "'writeFile' requer duas strings (caminho, conteúdo)")
+			}
+			err := os.WriteFile(AsString(pathVal), []byte(AsString(contentVal)), 0644)
+			if err != nil {
+				return vm.runtimeError(frame, "erro ao escrever arquivo '%s': %s", AsString(pathVal), err)
+			}
 		case byte(OP_POP):
 			vm.pop()
 
@@ -445,8 +513,10 @@ func (vm *VM) Run() error {
 
 func (vm *VM) runtimeError(frame *CallFrame, format string, args ...interface{}) error {
 	msg := fmt.Sprintf(format, args...)
-	// Pega a linha do chunk da *função atual*
-	line := frame.function.Chunk.GetLine(frame.ip - 1)
+	line := 0
+	if frame.ip > 0 {
+		line = frame.function.Chunk.GetLine(frame.ip - 1)
+	}
 	return fmt.Errorf("[Linha %d] Erro de Execução: %s", line, msg)
 }
 
@@ -482,7 +552,7 @@ func (vm *VM) readConstant(frame *CallFrame) Value {
 // --- Funções da Pilha (Stack) (Não mudam) ---
 
 func (vm *VM) push(val Value) {
-	if vm.stackTop >= STACK_MAX {
+	if vm.stackTop >= len(vm.stack) {
 		panic("Stack overflow!")
 	}
 	vm.stack[vm.stackTop] = val

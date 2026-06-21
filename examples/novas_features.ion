@@ -1,0 +1,35 @@
+begin program
+    /* Teste de comentário de bloco
+       esta linha está comentada
+       e esta também */
+    declare x: number := 10
+    declare y: number := 3
+    declare z: number
+
+    // Teste de float
+    declare pi: number := 3.14
+    declare metade: number := 0.5
+    display "pi = ", pi
+    display "metade = ", metade
+
+    // Teste de >=
+    if x >= 10 then
+        display "x >= 10: OK"
+    endif
+
+    // Teste de <=
+    if x <= 15 then
+        display "x <= 15: OK"
+    endif
+
+    // Teste de módulo
+    z := x % y
+    display "10 % 3 = ", z
+
+    // Teste de >= e <= combinados
+    if x >= 5 and x <= 20 then
+        display "x esta entre 5 e 20: OK"
+    endif
+
+    display "Todas as novas features funcionam!"
+end program

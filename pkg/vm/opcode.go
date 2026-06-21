@@ -85,6 +85,9 @@ const (
 	OP_GREATER // Usado para (i > 10) -> sair do loop
 
 	OP_LESS  // Compara B < A
+	OP_LESS_EQUAL    // Compara B <= A
+	OP_GREATER_EQUAL // Compara B >= A
+	OP_MODULO        // A % B
 	OP_EQUAL // Compara B == A
 
 	// OP_POP: Retira (descarta) o valor do topo da pilha.
@@ -95,6 +98,11 @@ const (
 	OP_SET_LOCAL // Define uma variável local (parâmetro) na pilha
 	OP_CALL      // Chama uma função
 	OP_RETURN
-	// OP_HALT: Para a Máquina Virtual.
+	OP_TO_STRING // Converte topo da pilha para string
+	OP_TO_NUMBER // Converte topo da pilha para number (ou nil)
+	OP_EXIT      // Encerra com código de saída
+	OP_READ_FILE // Lê arquivo, push conteúdo como string
+	OP_WRITE_FILE // Escreve conteúdo em arquivo
+
 	OP_HALT
 )

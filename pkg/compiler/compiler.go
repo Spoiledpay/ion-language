@@ -7,41 +7,79 @@ import (
 	"ion-language/pkg/vm"
 )
 
-// --- NOVO STRUCT V9: RASTREADOR DE ESCOPO ---
+// Type representa o tipo de uma expressão em tempo de compilação.
+type Type int
+
+const (
+	TYPE_NUMBER   Type = iota
+	TYPE_STRING
+	TYPE_BOOLEAN
+	TYPE_NIL
+	TYPE_ARRAY
+	TYPE_FUNCTION
+	TYPE_UNKNOWN
+)
+
+func (t Type) String() string {
+	switch t {
+	case TYPE_NUMBER:
+		return "number"
+	case TYPE_STRING:
+		return "string"
+	case TYPE_BOOLEAN:
+		return "boolean"
+	case TYPE_NIL:
+		return "nil"
+	case TYPE_ARRAY:
+		return "array"
+	case TYPE_FUNCTION:
+		return "function"
+	default:
+		return "unknown"
+	}
+}
+
 // Symbol representa uma variável (local ou global).
 type Symbol struct {
-	Name  string
-	Scope string // "global", "local"
-	Index int    // Índice no slot local ou no pool de globais
+	Name    string
+	Scope   string // "global", "local"
+	Index   int    // Índice no slot local ou no pool de globais
+	VarType Type   // Tipo da variável para type checking
 }
 
 // SymbolTable rastreia todas as variáveis em um escopo.
 type SymbolTable struct {
 	store map[string]Symbol
-	// Para escopos aninhados (ainda não usado na V9, mas bom para o futuro)
-	// Outer *SymbolTable
+	Outer *SymbolTable // Para escopos aninhados (blocos)
 
-	// Contagem de variáveis locais neste escopo
 	localCount int
 }
 
 func NewSymbolTable() *SymbolTable {
 	return &SymbolTable{
 		store: make(map[string]Symbol),
-		// 'Outer' não é necessário para o Escopo de Função (V13)
 	}
 }
 
+func NewEnclosedSymbolTable(outer *SymbolTable) *SymbolTable {
+	s := NewSymbolTable()
+	s.Outer = outer
+	return s
+}
+
 // Define registra um novo símbolo local (parâmetro).
-func (s *SymbolTable) Define(name string, scope string, index int) Symbol {
-	symbol := Symbol{Name: name, Scope: scope, Index: index}
+func (s *SymbolTable) Define(name string, scope string, index int, varType Type) Symbol {
+	symbol := Symbol{Name: name, Scope: scope, Index: index, VarType: varType}
 	s.store[name] = symbol
 	return symbol
 }
 
-// Resolve encontra um símbolo pelo nome.
+// Resolve encontra um símbolo pelo nome, percorrendo escopos aninhados.
 func (s *SymbolTable) Resolve(name string) (Symbol, bool) {
 	symbol, ok := s.store[name]
+	if !ok && s.Outer != nil {
+		return s.Outer.Resolve(name)
+	}
 	return symbol, ok
 }
 
@@ -56,15 +94,59 @@ type Compiler struct {
 	localCount int // Quantos locais *esta* função possui
 	// --- FIM V13 ---
 
-	globals map[string]int
-	errors  []string
+	globals     map[string]int
+	errors      []string
+	typeStack    []Type
+	loopStack   []int    // endereços de início de loop para continue
+	breakStack  [][]int  // endereços de jump para resolver no break
+}
+
+func (c *Compiler) pushType(t Type) {
+	c.typeStack = append(c.typeStack, t)
+}
+
+func (c *Compiler) popType() Type {
+	if len(c.typeStack) == 0 {
+		return TYPE_UNKNOWN
+	}
+	t := c.typeStack[len(c.typeStack)-1]
+	c.typeStack = c.typeStack[:len(c.typeStack)-1]
+	return t
+}
+
+func (c *Compiler) peekType(distance int) Type {
+	if len(c.typeStack)-1-distance < 0 {
+		return TYPE_UNKNOWN
+	}
+	return c.typeStack[len(c.typeStack)-1-distance]
+}
+
+func (c *Compiler) discardType() {
+	if len(c.typeStack) > 0 {
+		c.typeStack = c.typeStack[:len(c.typeStack)-1]
+	}
+}
+
+func (c *Compiler) getTypeFromTypeNode(node parser.Expression) Type {
+	switch n := node.(type) {
+	case *parser.TypeIdentifier:
+		switch n.Token.Type {
+		case lexer.TOKEN_NUMBER_TYPE:
+			return TYPE_NUMBER
+		case lexer.TOKEN_STRING_TYPE:
+			return TYPE_STRING
+		case lexer.TOKEN_BOOLEAN_TYPE:
+			return TYPE_BOOLEAN
+		}
+	case *parser.ArrayTypeNode:
+		return TYPE_ARRAY
+	}
+	return TYPE_UNKNOWN
 }
 
 // NewCompiler cria um *novo* compilador (para o script ou uma função).
-func NewCompiler(globals map[string]int) *Compiler { // <--- MUDANÇA V13
-
-	// (O resto da função é quase o mesmo)
-	name := "<script>" // V13: Começa como script
+func NewCompiler(globals map[string]int) *Compiler {
+	name := "<script>"
 
 	return &Compiler{
 		function: &vm.FunctionObject{
@@ -74,13 +156,14 @@ func NewCompiler(globals map[string]int) *Compiler { // <--- MUDANÇA V13
 		},
 		symbolTable: NewSymbolTable(),
 
-		// --- MUDANÇAS V13 ---
-		scopeDepth: 0, // Começa no escopo 0 (global)
-		localCount: 0, // Sem locais ainda
-		// --- FIM V13 ---
+		scopeDepth: 0,
+		localCount: 0,
 
-		globals: globals,
-		errors:  []string{},
+		globals:     globals,
+		errors:      []string{},
+		typeStack:   []Type{},
+		loopStack:   []int{},
+		breakStack:  [][]int{},
 	}
 }
 
@@ -89,15 +172,10 @@ func NewCompiler(globals map[string]int) *Compiler { // <--- MUDANÇA V13
 func Compile(program *parser.Program) (*vm.FunctionObject, []string) {
 	globals := make(map[string]int)
 
-	c := NewCompiler(globals) // <--- MUDANÇA V13
+	c := NewCompiler(globals)
 
-	// --- MUDANÇAS V13 ---
-	// Entra no escopo 1 (o script 'main')
-	c.scopeDepth++
-	// O slot 0 da pilha é reservado para a função do script
-	c.symbolTable.Define(c.function.Name, "local", c.localCount)
+	c.symbolTable.Define(c.function.Name, "local", c.localCount, TYPE_FUNCTION)
 	c.localCount++
-	// --- FIM V13 ---
 
 	if err := c.compileStatements(program.Statements); err != nil {
 		c.addError(err)
@@ -151,6 +229,14 @@ func (c *Compiler) compileStatement(stmt parser.Statement) error {
 		return c.compileIfStatement(s)
 	case *parser.WhileStatement:
 		return c.compileWhileStatement(s)
+	case *parser.BreakStatement:
+		return c.compileBreakStatement(s)
+	case *parser.ContinueStatement:
+		return c.compileContinueStatement(s)
+	case *parser.ExitStatement:
+		return c.compileExitStatement(s)
+	case *parser.WriteFileStatement:
+		return c.compileWriteFileStatement(s)
 	default:
 		return fmt.Errorf("compilador V9 não suporta o 'Statement' tipo %T", stmt)
 	}
@@ -186,14 +272,17 @@ func (c *Compiler) compileExpression(expr parser.Expression) error {
 
 	// (Restante dos cases não muda)
 	case *parser.NumberLiteral:
+		c.pushType(TYPE_NUMBER)
 		val := vm.NewNumberValue(e.Value)
 		return c.currentChunk().WriteConstant(val, e.Token.Line)
 	case *parser.StringLiteral:
+		c.pushType(TYPE_STRING)
 		val := vm.NewStringValue(e.Value)
 		return c.currentChunk().WriteConstant(val, e.Token.Line)
 	case *parser.InfixExpression:
 		return c.compileInfixExpression(e)
 	case *parser.BooleanLiteral:
+		c.pushType(TYPE_BOOLEAN)
 		if e.Value {
 			c.emitByte(byte(vm.OP_TRUE), e.Token.Line)
 		} else {
@@ -201,6 +290,7 @@ func (c *Compiler) compileExpression(expr parser.Expression) error {
 		}
 		return nil
 	case *parser.NilLiteral:
+		c.pushType(TYPE_NIL)
 		c.emitByte(byte(vm.OP_NIL), e.Token.Line)
 		return nil
 	case *parser.InputExpression:
@@ -219,88 +309,89 @@ func (c *Compiler) compileExpression(expr parser.Expression) error {
 		return c.compileLenExpression(e)
 	case *parser.GetByteAtExpression:
 		return c.compileGetByteAtExpression(e)
+	case *parser.ToStringExpression:
+		return c.compileToStringExpression(e)
+	case *parser.ToNumberExpression:
+		return c.compileToNumberExpression(e)
+	case *parser.ReadFileExpression:
+		return c.compileReadFileExpression(e)
 	default:
 		return fmt.Errorf("compilador V9 não suporta a 'Expression' tipo %T", expr)
 	}
 }
 
-// compileLenExpression gera bytecode para len(string_ou_array)
 func (c *Compiler) compileLenExpression(expr *parser.LenExpression) error {
-	// 1. Compila a expressão do argumento (a string ou array)
-	// (O objeto estará no topo da pilha)
 	if err := c.compileExpression(expr.Argument); err != nil {
 		return err
 	}
-
-	// 2. Emite OP_LEN
-	// A VM irá (pop objeto) e (push comprimento)
+	argType := c.popType()
+	if argType != TYPE_STRING && argType != TYPE_ARRAY && argType != TYPE_UNKNOWN {
+		return fmt.Errorf("'len' requer string ou array, recebeu %s (Linha: %d)", argType, expr.Token.Line)
+	}
+	c.pushType(TYPE_NUMBER)
 	c.emitByte(byte(vm.OP_LEN), expr.Token.Line)
 	return nil
 }
 
-// compileGetByteAtExpression gera bytecode para get_byte_at(string, index)
 func (c *Compiler) compileGetByteAtExpression(expr *parser.GetByteAtExpression) error {
-	// 1. Compila a string alvo
-	// (A string estará no topo da pilha)
 	if err := c.compileExpression(expr.Target); err != nil {
 		return err
 	}
+	targetType := c.popType()
+	if targetType != TYPE_STRING && targetType != TYPE_UNKNOWN {
+		return fmt.Errorf("'get_byte_at' requer uma string, recebeu %s (Linha: %d)", targetType, expr.Token.Line)
+	}
 
-	// 2. Compila o índice
-	// (Pilha agora: [ string, index ])
 	if err := c.compileExpression(expr.Index); err != nil {
 		return err
 	}
+	indexType := c.popType()
+	if indexType != TYPE_NUMBER && indexType != TYPE_UNKNOWN {
+		return fmt.Errorf("'get_byte_at' requer um número como índice, recebeu %s (Linha: %d)", indexType, expr.Token.Line)
+	}
 
-	// 3. Emite OP_GET_BYTE_AT
-	// A VM irá (pop index, pop string) e (push byte_num)
+	c.pushType(TYPE_NUMBER)
 	c.emitByte(byte(vm.OP_GET_BYTE_AT), expr.Token.Line)
 	return nil
 }
 
-// compileDeclareStatement (VERSÃO V13.1 - CORRIGIDA)
-// compileDeclareStatement (VERSÃO V13.7 - CORRIGIDA PARA ESCOPO LOCAL)
 func (c *Compiler) compileDeclareStatement(stmt *parser.DeclareStatement) error {
 	varName := stmt.Name.Value
 	line := stmt.Token.Line
 
-	// 1. Registra a variável na SymbolTable.
-	// (Fazemos isso ANTES de compilar o valor)
-	var symbol Symbol
-	var idx int
-	var isLocal = c.scopeDepth > 0
+	declaredType := c.getTypeFromTypeNode(stmt.TypeNode)
 
-	if isLocal {
-		// Estamos em um escopo local (função ou main)
-		symbol = c.symbolTable.Define(varName, "local", c.localCount)
-		c.localCount++
-	} else {
-		// Estamos no escopo global
-		if _, exists := c.globals[varName]; exists {
-			return fmt.Errorf("variável global '%s' já foi declarada (Linha: %d)", varName, line)
-		}
-	}
-
-	// 2. Compila o valor (se houver) ou o padrão
 	if stmt.Value != nil {
 		if err := c.compileExpression(stmt.Value); err != nil {
 			return err
+		}
+		valueType := c.popType()
+		if valueType != TYPE_UNKNOWN && valueType != TYPE_NIL && declaredType != TYPE_UNKNOWN && valueType != declaredType {
+			return fmt.Errorf("tipo incompatível na declaração de '%s': esperava %s, recebeu %s (Linha: %d)",
+				varName, declaredType, valueType, line)
 		}
 	} else {
 		if err := c.compileTypeNode(stmt.TypeNode, stmt.Token.Line); err != nil {
 			return err
 		}
+		c.discardType()
 	}
 
-	// 3. Emite o opcode de definição
+	var symbol Symbol
+	var idx int
+	var isLocal = c.scopeDepth > 0
+
 	if isLocal {
-		// --- ESTA É A CORREÇÃO V13.7 ---
-		// Emite OP_SET_LOCAL para *inicializar* a variável.
-		// A VM (V13.3) usa 'peek()', então o valor permanece na pilha,
-		// aumentando o stackTop (o que está correto para 'declare').
+		symbol = c.symbolTable.Define(varName, "local", c.localCount, declaredType)
+		c.localCount++
+		if symbol.Index > 255 {
+			return fmt.Errorf("limite de 256 variáveis locais excedido na declaração de '%s' (Linha: %d)", varName, line)
+		}
 		c.emitBytes(byte(vm.OP_SET_LOCAL), byte(symbol.Index), line)
 	} else {
-		// Lógica do defineGlobal (V9)
+		if _, exists := c.globals[varName]; exists {
+			return fmt.Errorf("variável global '%s' já foi declarada (Linha: %d)", varName, line)
+		}
 		nameConst := vm.NewStringValue(varName)
 		idx = c.currentChunk().AddConstant(nameConst)
 		if idx > 255 {
@@ -313,107 +404,119 @@ func (c *Compiler) compileDeclareStatement(stmt *parser.DeclareStatement) error 
 	return nil
 }
 
-// compileTypeNode (VERSÃO V13.1 - CORRIGIDA)
 func (c *Compiler) compileTypeNode(node parser.Expression, line int) error {
 	switch n := node.(type) {
 
 	case *parser.TypeIdentifier:
-		// Tipos simples (number, string, boolean)
 		switch n.Token.Type {
 		case lexer.TOKEN_NUMBER_TYPE:
+			c.pushType(TYPE_NUMBER)
 			val := vm.NewNumberValue(0)
 			return c.currentChunk().WriteConstant(val, line)
 		case lexer.TOKEN_STRING_TYPE:
+			c.pushType(TYPE_STRING)
 			val := vm.NewStringValue("")
 			return c.currentChunk().WriteConstant(val, line)
 		case lexer.TOKEN_BOOLEAN_TYPE:
+			c.pushType(TYPE_BOOLEAN)
 			c.emitByte(byte(vm.OP_FALSE), line)
 			return nil
 		}
 
 	case *parser.ArrayTypeNode:
-		// Tipo Array: [tipo](tamanho)
-
-		// --- INÍCIO DA CORREÇÃO V13.1 ---
-		// 1. Determina o valor padrão para o tipo base e o coloca na pilha.
-		// (Precisamos de um 'TypeIdentifier' temporário para chamar a nós mesmos)
 		tempTypeNode := &parser.TypeIdentifier{Token: n.BaseType}
 		if err := c.compileTypeNode(tempTypeNode, line); err != nil {
 			return err
 		}
-		// Pilha agora: [ valor_padrao ]
-
-		// 2. Compila a expressão de tamanho
 		if err := c.compileExpression(n.Size); err != nil {
 			return err
 		}
-		// Pilha agora: [ valor_padrao, tamanho ]
-
-		// 3. Emite OP_NEW_ARRAY
-		// A VM irá (pop tamanho, pop valor_padrao) e (push novo_array)
+		c.discardType()
+		c.discardType()
+		c.pushType(TYPE_ARRAY)
 		c.emitByte(byte(vm.OP_NEW_ARRAY), line)
 		return nil
-		// --- FIM DA CORREÇÃO ---
 	}
 
 	return fmt.Errorf("tipo desconhecido encontrado pelo compilador (Linha: %d)", line)
 }
 
-// compileIndexExpression gera bytecode para *ler* um índice (ex: display tape[10])
 func (c *Compiler) compileIndexExpression(expr *parser.IndexExpression) error {
-	// 1. Compila o array (ex: 'tape')
-	// (O array estará no topo da pilha)
 	if err := c.compileExpression(expr.Left); err != nil {
 		return err
 	}
-
-	// 2. Compila o índice (ex: '10')
-	// (Pilha agora: [ array, index ])
+	arrayType := c.peekType(0)
+	if arrayType != TYPE_ARRAY && arrayType != TYPE_UNKNOWN {
+		return fmt.Errorf("índice só pode ser aplicado a arrays, recebeu %s (Linha: %d)", arrayType, expr.Token.Line)
+	}
 	if err := c.compileExpression(expr.Index); err != nil {
 		return err
 	}
-
-	// 3. Emite OP_GET_INDEX
-	// A VM irá (pop index, pop array) e (push valor_do_indice)
+	c.discardType()
+	c.discardType()
+	c.pushType(TYPE_UNKNOWN)
 	c.emitByte(byte(vm.OP_GET_INDEX), expr.Token.Line)
 	return nil
 }
 
 func (c *Compiler) compileAssignmentStatement(stmt *parser.AssignmentStatement) error {
 	line := stmt.Token.Line
+	isCompound := stmt.Operator != ":="
 
-	// Verifica o que está do lado esquerdo (Left)
 	switch left := stmt.Left.(type) {
 
 	case *parser.Identifier:
-		// Caso: x := 123
+		varName := left.Value
 
-		// 1. Compila o valor (ex: '123').
+		if isCompound {
+			if symbol, ok := c.symbolTable.Resolve(varName); ok {
+				if symbol.Index > 255 {
+					return fmt.Errorf("limite de 256 variáveis locais excedido (Linha: %d)", line)
+				}
+				c.emitBytes(byte(vm.OP_GET_LOCAL), byte(symbol.Index), line)
+			} else {
+				idx, ok := c.globals[varName]
+				if !ok {
+					return fmt.Errorf("variável '%s' não declarada (Linha: %d)", varName, line)
+				}
+				c.emitBytes(byte(vm.OP_GET_GLOBAL), byte(idx), line)
+			}
+		}
+
 		if err := c.compileExpression(stmt.Value); err != nil {
 			return err
 		}
+		valueType := c.popType()
 
-		varName := left.Value
-
-		// 2. Resolve o escopo (Local ou Global?)
 		if symbol, ok := c.symbolTable.Resolve(varName); ok {
-			// É uma variável local (parâmetro)
+			if symbol.VarType != TYPE_UNKNOWN && valueType != TYPE_UNKNOWN && valueType != TYPE_NIL && symbol.VarType != valueType {
+				return fmt.Errorf("tipo incompatível na atribuição a '%s': esperava %s, recebeu %s (Linha: %d)",
+					varName, symbol.VarType, valueType, line)
+			}
+			if isCompound {
+				if valueType != TYPE_NUMBER && valueType != TYPE_UNKNOWN {
+					return fmt.Errorf("operador '%s' requer operandos número, recebeu %s (Linha: %d)",
+						stmt.Operator, valueType, line)
+				}
+				c.emitCompoundOp(stmt.Operator, line)
+			}
+			c.pushType(valueType)
+			if symbol.Index > 255 {
+				return fmt.Errorf("limite de 256 variáveis locais excedido (Linha: %d)", line)
+			}
 			c.emitBytes(byte(vm.OP_SET_LOCAL), byte(symbol.Index), line)
-
-			// --- CORREÇÃO V13.3 ---
-			// Como SET_LOCAL usa 'peek', o valor ainda está na pilha.
-			// A atribuição (:=) deve limpar a pilha.
 			c.emitByte(byte(vm.OP_POP), line)
-			// --- FIM DA CORREÇÃO ---
 
 		} else {
-			// É uma variável global
 			idx, ok := c.globals[varName]
 			if !ok {
 				return fmt.Errorf("variável '%s' não declarada (Linha: %d)", varName, line)
 			}
+			if isCompound {
+				c.emitCompoundOp(stmt.Operator, line)
+			}
+			c.pushType(TYPE_UNKNOWN)
 			c.emitBytes(byte(vm.OP_SET_GLOBAL), byte(idx), line)
-			// (OP_SET_GLOBAL usa 'pop()' na VM, então não precisa de OP_POP aqui)
 		}
 
 	case *parser.IndexExpression:
@@ -446,6 +549,22 @@ func (c *Compiler) compileAssignmentStatement(stmt *parser.AssignmentStatement) 
 	return nil
 }
 
+func (c *Compiler) emitCompoundOp(op string, line int) error {
+	switch op {
+	case "+=":
+		c.emitByte(byte(vm.OP_ADD), line)
+	case "-=":
+		c.emitByte(byte(vm.OP_SUBTRACT), line)
+	case "*=":
+		c.emitByte(byte(vm.OP_MULTIPLY), line)
+	case "/=":
+		c.emitByte(byte(vm.OP_DIVIDE), line)
+	default:
+		return fmt.Errorf("operador composto desconhecido: %s (Linha: %d)", op, line)
+	}
+	return nil
+}
+
 // (Display, For, If, While: O código não muda, pois eles
 // apenas chamam 'compileStatement' e 'compileExpression'
 // que agora estão cientes do escopo)
@@ -462,10 +581,14 @@ func (c *Compiler) compileFunctionStatement(stmt *parser.FunctionStatement) erro
 	funcCompiler.scopeDepth = 1
 	funcCompiler.function.Name = varName
 	funcCompiler.function.Arity = len(stmt.Parameters)
-	funcCompiler.symbolTable.Define(varName, "local", funcCompiler.localCount)
+	funcCompiler.symbolTable.Define(varName, "local", funcCompiler.localCount, TYPE_FUNCTION)
 	funcCompiler.localCount++
 	for _, param := range stmt.Parameters {
-		funcCompiler.symbolTable.Define(param.Value, "local", funcCompiler.localCount)
+		paramType := TYPE_UNKNOWN
+		if param.Type != nil {
+			paramType = c.getTypeFromTypeNode(param.Type)
+		}
+		funcCompiler.symbolTable.Define(param.Name.Value, "local", funcCompiler.localCount, paramType)
 		funcCompiler.localCount++
 	}
 	if err := funcCompiler.compileStatements(stmt.Body); err != nil {
@@ -482,10 +605,11 @@ func (c *Compiler) compileFunctionStatement(stmt *parser.FunctionStatement) erro
 
 	// 6. Define a função como uma variável (Global ou Local)
 	if c.scopeDepth > 0 {
-		// --- ESTA É A CORREÇÃO ---
-		// É uma variável LOCAL
-		symbol := c.symbolTable.Define(varName, "local", c.localCount)
+		symbol := c.symbolTable.Define(varName, "local", c.localCount, TYPE_FUNCTION)
 		c.localCount++
+		if symbol.Index > 255 {
+			return fmt.Errorf("limite de 256 variáveis locais excedido (Linha: %d)", line)
+		}
 		c.emitBytes(byte(vm.OP_SET_LOCAL), byte(symbol.Index), line)
 	} else {
 		// É uma variável GLOBAL
@@ -501,20 +625,19 @@ func (c *Compiler) compileFunctionStatement(stmt *parser.FunctionStatement) erro
 }
 
 func (c *Compiler) compileCallExpression(expr *parser.CallExpression) error {
-	// 1. Compila a função (o nome, ex: 'Saudacao')
-	// (Isso coloca o FunctionObject no topo da pilha)
 	if err := c.compileExpression(expr.Function); err != nil {
 		return err
 	}
-
-	// 2. Compila todos os argumentos
 	for _, arg := range expr.Arguments {
 		if err := c.compileExpression(arg); err != nil {
 			return err
 		}
 	}
-
-	// 3. Emite OP_CALL com o número de argumentos
+	c.discardType()
+	for range expr.Arguments {
+		c.discardType()
+	}
+	c.pushType(TYPE_UNKNOWN)
 	line := expr.Token.Line
 	c.emitBytes(byte(vm.OP_CALL), byte(len(expr.Arguments)), line)
 	return nil
@@ -525,15 +648,18 @@ func (c *Compiler) compileIdentifier(expr *parser.Identifier) error {
 	varName := expr.Value
 	line := expr.Token.Line
 
-	// 1. Tenta resolver como local
 	if symbol, ok := c.symbolTable.Resolve(varName); ok {
+		c.pushType(symbol.VarType)
+		if symbol.Index > 255 {
+			return fmt.Errorf("limite de 256 variáveis locais excedido (Linha: %d)", line)
+		}
 		c.emitBytes(byte(vm.OP_GET_LOCAL), byte(symbol.Index), line)
 	} else {
-		// 2. Se não, resolve como global
 		idx, ok := c.globals[varName]
 		if !ok {
 			return fmt.Errorf("variável '%s' não declarada (Linha: %d)", varName, line)
 		}
+		c.pushType(TYPE_UNKNOWN)
 		c.emitBytes(byte(vm.OP_GET_GLOBAL), byte(idx), line)
 	}
 	return nil
@@ -592,17 +718,9 @@ func (c *Compiler) defineGlobal(varName string, line int) error {
 }
 
 func (c *Compiler) defineLocal(name string) {
-	// A V13 usa escopo de função, então não precisamos checar re-declaração
-	// (permitimos sombreamento se implementarmos escopo de bloco)
-
-	// O índice da nova variável é o 'localCount' atual
-	symbol := c.symbolTable.Define(name, "local", c.localCount)
+	symbol := c.symbolTable.Define(name, "local", c.localCount, TYPE_UNKNOWN)
 	c.localCount++
-
-	// O compilador NÃO emite OP_SET_LOCAL.
-	// O valor já está no topo da pilha, pronto para ser
-	// o novo local [stackSlot + index]
-	_ = symbol // (usamos a variável para evitar erro de 'unused')
+	_ = symbol
 }
 
 // (O código de For, If, While, Infix, Input, Prefix, Logical não muda
@@ -660,31 +778,38 @@ func (c *Compiler) compileForStatement(stmt *parser.ForStatement) error {
 		}
 	}
 
-	// 3. Emite o 'set' inicial (usando o escopo correto)
 	if isLocal {
+		if symbol.Index > 255 {
+			return fmt.Errorf("limite de 256 variáveis locais excedido (Linha: %d)", line)
+		}
 		c.emitBytes(byte(vm.OP_SET_LOCAL), byte(symbol.Index), line)
 	} else {
 		c.emitBytes(byte(vm.OP_SET_GLOBAL), byte(globalIndex), line)
 	}
 
-	// --- CORREÇÃO V13.3 (POP 1) ---
-	// Limpa o valor de inicialização da pilha (se for local)
 	if isLocal {
 		c.emitByte(byte(vm.OP_POP), line)
 	}
-	// --- FIM DA CORREÇÃO ---
 
-	// --- Loop ---
 	loopStart := c.currentAddress()
+	c.loopStack = append(c.loopStack, loopStart)
+	c.breakStack = append(c.breakStack, []int{})
 
-	// 4. Compila a condição (ex: i > end)
 	if err := c.compileExpression(stmt.Counter); err != nil {
 		return err
 	}
 	if err := c.compileExpression(stmt.End); err != nil {
 		return err
 	}
-	c.emitByte(byte(vm.OP_GREATER), line) // Condição de saída do For
+	stepNeg := false
+	if lit, ok := stmt.Step.(*parser.NumberLiteral); ok && lit.Value < 0 {
+		stepNeg = true
+	}
+	if stepNeg {
+		c.emitByte(byte(vm.OP_LESS), line)
+	} else {
+		c.emitByte(byte(vm.OP_GREATER), line)
+	}
 
 	jumpToBody := c.emitJump(byte(vm.OP_JUMP_IF_FALSE), line)
 	jumpToExit := c.emitJump(byte(vm.OP_JUMP), line)
@@ -692,14 +817,21 @@ func (c *Compiler) compileForStatement(stmt *parser.ForStatement) error {
 	c.patchJump(jumpToBody)
 	c.emitByte(byte(vm.OP_POP), line)
 
-	// 5. Compila o Corpo
+	// --- ESCOPO DE BLOCO ---
+	oldLocalCount := c.localCount
+	oldScope := c.scopeDepth
+	c.scopeDepth++
+	oldTable := c.symbolTable
+	c.symbolTable = NewEnclosedSymbolTable(oldTable)
 	for _, bodyStmt := range stmt.Body {
 		if err := c.compileStatement(bodyStmt); err != nil {
 			return err
 		}
 	}
-
-	// 6. Compila o incremento (ex: i + step)
+	c.symbolTable = oldTable
+	c.localCount = oldLocalCount
+	c.scopeDepth = oldScope
+	// --- FIM ESCOPO DE BLOCO ---
 	if err := c.compileExpression(stmt.Counter); err != nil {
 		return err
 	}
@@ -708,24 +840,35 @@ func (c *Compiler) compileForStatement(stmt *parser.ForStatement) error {
 	}
 	c.emitByte(byte(vm.OP_ADD), line)
 
-	// 7. Emite o 'set' do incremento (usando o escopo correto)
 	if isLocal {
+		if symbol.Index > 255 {
+			return fmt.Errorf("limite de 256 variáveis locais excedido (Linha: %d)", line)
+		}
 		c.emitBytes(byte(vm.OP_SET_LOCAL), byte(symbol.Index), line)
 	} else {
 		c.emitBytes(byte(vm.OP_SET_GLOBAL), byte(globalIndex), line)
 	}
 
-	// --- CORREÇÃO V13.3 (POP 2) ---
-	// Limpa o valor do incremento da pilha (se for local)
 	if isLocal {
 		c.emitByte(byte(vm.OP_POP), line)
 	}
-	// --- FIM DA CORREÇÃO ---
 
-	// --- Fim do Loop ---
 	c.emitLoop(loopStart, line)
 	c.patchJump(jumpToExit)
 	c.emitByte(byte(vm.OP_POP), line)
+
+	breakAddrs := c.breakStack[len(c.breakStack)-1]
+	exitAddr := c.currentAddress()
+	for _, addr := range breakAddrs {
+		jump := exitAddr - addr - 2
+		if jump > 65535 {
+			continue
+		}
+		c.currentChunk().Code[addr] = byte(jump>>8) & 0xFF
+		c.currentChunk().Code[addr+1] = byte(jump) & 0xFF
+	}
+	c.loopStack = c.loopStack[:len(c.loopStack)-1]
+	c.breakStack = c.breakStack[:len(c.breakStack)-1]
 
 	return nil
 }
@@ -734,24 +877,31 @@ func (c *Compiler) compileForStatement(stmt *parser.ForStatement) error {
 func (c *Compiler) compileIfStatement(stmt *parser.IfStatement) error {
 	line := stmt.Token.Line
 
-	// 1. Compila a Condição (ex: cmd == 62)
-	// (Pilha: [..., true/false])
 	if err := c.compileExpression(stmt.Condition); err != nil {
 		return err
 	}
-
-	// 2. Salta para o 'else' (ou fim) se for falso
+	c.discardType()
 	jumpToElse := c.emitJump(byte(vm.OP_JUMP_IF_FALSE), line)
 
 	// 3. Bloco 'Then' (executa se for 'true')
 	// --- CORREÇÃO V13.6 ---
 	c.emitByte(byte(vm.OP_POP), line) // Pop o 'true' AQUI
 	// --- FIM DA CORREÇÃO ---
+	// --- ESCOPO DE BLOCO ---
+	oldLocalCount := c.localCount
+	oldScope := c.scopeDepth
+	c.scopeDepth++
+	oldTable := c.symbolTable
+	c.symbolTable = NewEnclosedSymbolTable(oldTable)
 	for _, s := range stmt.Consequence {
 		if err := c.compileStatement(s); err != nil {
 			return err
 		}
 	}
+	c.symbolTable = oldTable
+	c.localCount = oldLocalCount
+	c.scopeDepth = oldScope
+	// --- FIM ESCOPO DE BLOCO ---
 
 	// O 'then' salta o 'else'
 	jumpOverElse := c.emitJump(byte(vm.OP_JUMP), line)
@@ -765,11 +915,21 @@ func (c *Compiler) compileIfStatement(stmt *parser.IfStatement) error {
 
 	if stmt.Alternative != nil {
 		// 6. Compila o 'else'
+		// --- ESCOPO DE BLOCO ---
+		oldLocalCount2 := c.localCount
+		oldScope2 := c.scopeDepth
+		c.scopeDepth++
+		oldTable2 := c.symbolTable
+		c.symbolTable = NewEnclosedSymbolTable(oldTable2)
 		for _, s := range stmt.Alternative {
 			if err := c.compileStatement(s); err != nil {
 				return err
 			}
 		}
+		c.symbolTable = oldTable2
+		c.localCount = oldLocalCount2
+		c.scopeDepth = oldScope2
+		// --- FIM ESCOPO DE BLOCO ---
 	}
 
 	// 7. Ponto final. Corrige o salto do 'then'
@@ -778,22 +938,69 @@ func (c *Compiler) compileIfStatement(stmt *parser.IfStatement) error {
 	return nil
 }
 
+func (c *Compiler) compileBreakStatement(stmt *parser.BreakStatement) error {
+	if len(c.loopStack) == 0 {
+		return fmt.Errorf("'break' só pode ser usado dentro de um loop (Linha: %d)", stmt.Token.Line)
+	}
+	idx := len(c.breakStack) - 1
+	addr := c.emitJump(byte(vm.OP_JUMP), stmt.Token.Line)
+	c.breakStack[idx] = append(c.breakStack[idx], addr)
+	return nil
+}
+
+func (c *Compiler) compileContinueStatement(stmt *parser.ContinueStatement) error {
+	if len(c.loopStack) == 0 {
+		return fmt.Errorf("'continue' só pode ser usado dentro de um loop (Linha: %d)", stmt.Token.Line)
+	}
+	loopStart := c.loopStack[len(c.loopStack)-1]
+	c.emitLoop(loopStart, stmt.Token.Line)
+	return nil
+}
+
 func (c *Compiler) compileWhileStatement(stmt *parser.WhileStatement) error {
 	line := stmt.Token.Line
 	loopStart := c.currentAddress()
+	c.loopStack = append(c.loopStack, loopStart)
+	c.breakStack = append(c.breakStack, []int{})
 	if err := c.compileExpression(stmt.Condition); err != nil {
 		return err
 	}
+	c.discardType()
 	jumpToExit := c.emitJump(byte(vm.OP_JUMP_IF_FALSE), line)
+	c.discardType()
 	c.emitByte(byte(vm.OP_POP), line)
+	// --- ESCOPO DE BLOCO ---
+	oldLocalCount := c.localCount
+	oldScope := c.scopeDepth
+	c.scopeDepth++
+	oldTable := c.symbolTable
+	c.symbolTable = NewEnclosedSymbolTable(oldTable)
 	for _, s := range stmt.Body {
 		if err := c.compileStatement(s); err != nil {
 			return err
 		}
 	}
+	c.symbolTable = oldTable
+	c.localCount = oldLocalCount
+	c.scopeDepth = oldScope
+	// --- FIM ESCOPO DE BLOCO ---
 	c.emitLoop(loopStart, line)
 	c.patchJump(jumpToExit)
 	c.emitByte(byte(vm.OP_POP), line)
+
+	breakAddrs := c.breakStack[len(c.breakStack)-1]
+	exitAddr := c.currentAddress()
+	for _, addr := range breakAddrs {
+		jump := exitAddr - addr - 2
+		if jump > 65535 {
+			continue
+		}
+		c.currentChunk().Code[addr] = byte(jump>>8) & 0xFF
+		c.currentChunk().Code[addr+1] = byte(jump) & 0xFF
+	}
+	c.loopStack = c.loopStack[:len(c.loopStack)-1]
+	c.breakStack = c.breakStack[:len(c.breakStack)-1]
+
 	return nil
 }
 func (c *Compiler) compileInfixExpression(expr *parser.InfixExpression) error {
@@ -803,24 +1010,77 @@ func (c *Compiler) compileInfixExpression(expr *parser.InfixExpression) error {
 	if err := c.compileExpression(expr.Right); err != nil {
 		return err
 	}
+
+	rightType := c.popType()
+	leftType := c.popType()
 	line := expr.Token.Line
+
 	switch expr.Token.Type {
-	case lexer.TOKEN_GREATER:
-		c.emitByte(byte(vm.OP_GREATER), line)
-	case lexer.TOKEN_LESS:
-		c.emitByte(byte(vm.OP_LESS), line)
-	case lexer.TOKEN_EQUAL_EQUAL:
-		c.emitByte(byte(vm.OP_EQUAL), line)
-	case lexer.TOKEN_NOT_EQUAL:
-		c.emitByte(byte(vm.OP_NOT_EQUAL), line)
-	case lexer.TOKEN_PLUS:
-		c.emitByte(byte(vm.OP_ADD), line)
-	case lexer.TOKEN_MINUS:
-		c.emitByte(byte(vm.OP_SUBTRACT), line)
-	case lexer.TOKEN_ASTERISK:
-		c.emitByte(byte(vm.OP_MULTIPLY), line)
-	case lexer.TOKEN_SLASH:
-		c.emitByte(byte(vm.OP_DIVIDE), line)
+	case lexer.TOKEN_PLUS, lexer.TOKEN_MINUS, lexer.TOKEN_ASTERISK, lexer.TOKEN_SLASH, lexer.TOKEN_PERCENT:
+		if leftType == TYPE_STRING && expr.Token.Type == lexer.TOKEN_PLUS {
+			c.pushType(TYPE_STRING)
+			c.emitByte(byte(vm.OP_CONCAT), line)
+			return nil
+		}
+		if leftType != TYPE_NUMBER || rightType != TYPE_NUMBER {
+			if leftType == TYPE_UNKNOWN || rightType == TYPE_UNKNOWN {
+				c.pushType(TYPE_NUMBER)
+			} else {
+				return fmt.Errorf("operandos devem ser números para '%s', recebeu %s e %s (Linha: %d)",
+					expr.Token.Literal, leftType, rightType, line)
+			}
+		} else {
+			c.pushType(TYPE_NUMBER)
+		}
+		switch expr.Token.Type {
+		case lexer.TOKEN_PLUS:
+			c.emitByte(byte(vm.OP_ADD), line)
+		case lexer.TOKEN_MINUS:
+			c.emitByte(byte(vm.OP_SUBTRACT), line)
+		case lexer.TOKEN_ASTERISK:
+			c.emitByte(byte(vm.OP_MULTIPLY), line)
+		case lexer.TOKEN_SLASH:
+			c.emitByte(byte(vm.OP_DIVIDE), line)
+		case lexer.TOKEN_PERCENT:
+			c.emitByte(byte(vm.OP_MODULO), line)
+		}
+
+	case lexer.TOKEN_GREATER, lexer.TOKEN_LESS, lexer.TOKEN_GREATER_EQUAL, lexer.TOKEN_LESS_EQUAL:
+		if leftType != TYPE_NUMBER || rightType != TYPE_NUMBER {
+			if leftType == TYPE_UNKNOWN || rightType == TYPE_UNKNOWN {
+				c.pushType(TYPE_BOOLEAN)
+			} else {
+				return fmt.Errorf("operandos devem ser números para '%s', recebeu %s e %s (Linha: %d)",
+					expr.Token.Literal, leftType, rightType, line)
+			}
+		} else {
+			c.pushType(TYPE_BOOLEAN)
+		}
+		switch expr.Token.Type {
+		case lexer.TOKEN_GREATER:
+			c.emitByte(byte(vm.OP_GREATER), line)
+		case lexer.TOKEN_GREATER_EQUAL:
+			c.emitByte(byte(vm.OP_GREATER_EQUAL), line)
+		case lexer.TOKEN_LESS:
+			c.emitByte(byte(vm.OP_LESS), line)
+		case lexer.TOKEN_LESS_EQUAL:
+			c.emitByte(byte(vm.OP_LESS_EQUAL), line)
+		}
+
+	case lexer.TOKEN_EQUAL_EQUAL, lexer.TOKEN_NOT_EQUAL:
+		if leftType != TYPE_UNKNOWN && rightType != TYPE_UNKNOWN && leftType != rightType &&
+			leftType != TYPE_NIL && rightType != TYPE_NIL {
+			return fmt.Errorf("tipos incompatíveis para '%s': %s e %s (Linha: %d)",
+				expr.Token.Literal, leftType, rightType, line)
+		}
+		c.pushType(TYPE_BOOLEAN)
+		switch expr.Token.Type {
+		case lexer.TOKEN_EQUAL_EQUAL:
+			c.emitByte(byte(vm.OP_EQUAL), line)
+		case lexer.TOKEN_NOT_EQUAL:
+			c.emitByte(byte(vm.OP_NOT_EQUAL), line)
+		}
+
 	default:
 		return fmt.Errorf("operador infix desconhecido: %s (Linha: %d)", expr.Token.Literal, line)
 	}
@@ -830,6 +1090,11 @@ func (c *Compiler) compileInputExpression(expr *parser.InputExpression) error {
 	if err := c.compileExpression(expr.Prompt); err != nil {
 		return err
 	}
+	promptType := c.popType()
+	if promptType != TYPE_STRING && promptType != TYPE_UNKNOWN {
+		return fmt.Errorf("'input' requer uma string como prompt, recebeu %s (Linha: %d)", promptType, expr.Token.Line)
+	}
+	c.pushType(TYPE_STRING)
 	c.emitByte(byte(vm.OP_INPUT), expr.Token.Line)
 	return nil
 }
@@ -840,6 +1105,8 @@ func (c *Compiler) compilePrefixExpression(expr *parser.PrefixExpression) error 
 	line := expr.Token.Line
 	switch expr.Token.Type {
 	case lexer.TOKEN_NOT:
+		c.discardType()
+		c.pushType(TYPE_BOOLEAN)
 		c.emitByte(byte(vm.OP_NOT), line)
 	default:
 		return fmt.Errorf("operador prefix desconhecido: %s (Linha: %d)", expr.Token.Literal, line)
@@ -848,27 +1115,34 @@ func (c *Compiler) compilePrefixExpression(expr *parser.PrefixExpression) error 
 }
 func (c *Compiler) compileLogicalExpression(expr *parser.LogicalExpression) error {
 	line := expr.Token.Line
+
+	if err := c.compileExpression(expr.Left); err != nil {
+		return err
+	}
+	c.discardType()
+	c.pushType(TYPE_BOOLEAN)
+
 	if expr.Operator == "and" {
-		if err := c.compileExpression(expr.Left); err != nil {
-			return err
-		}
 		jumpToExit := c.emitJump(byte(vm.OP_JUMP_IF_FALSE), line)
+		c.discardType()
 		c.emitByte(byte(vm.OP_POP), line)
 		if err := c.compileExpression(expr.Right); err != nil {
 			return err
 		}
+		c.discardType()
+		c.pushType(TYPE_BOOLEAN)
 		c.patchJump(jumpToExit)
 	} else if expr.Operator == "or" {
-		if err := c.compileExpression(expr.Left); err != nil {
-			return err
-		}
 		jumpToRight := c.emitJump(byte(vm.OP_JUMP_IF_FALSE), line)
 		jumpToExit := c.emitJump(byte(vm.OP_JUMP), line)
 		c.patchJump(jumpToRight)
+		c.discardType()
 		c.emitByte(byte(vm.OP_POP), line)
 		if err := c.compileExpression(expr.Right); err != nil {
 			return err
 		}
+		c.discardType()
+		c.pushType(TYPE_BOOLEAN)
 		c.patchJump(jumpToExit)
 	}
 	return nil
@@ -905,22 +1179,85 @@ func (c *Compiler) emitLoop(loopStart int, line int) {
 }
 
 func (c *Compiler) compileCharExpression(expr *parser.CharExpression) error {
-	// 1. Compila a expressão do argumento (ex: 65)
-	// (O número estará no topo da pilha)
 	if err := c.compileExpression(expr.Argument); err != nil {
 		return err
 	}
-
-	// 2. Emite OP_CHAR
-	// A VM irá (pop 65) e (push "A")
+	argType := c.popType()
+	if argType != TYPE_NUMBER && argType != TYPE_UNKNOWN {
+		return fmt.Errorf("'char' requer um número, recebeu %s (Linha: %d)", argType, expr.Token.Line)
+	}
+	c.pushType(TYPE_STRING)
 	c.emitByte(byte(vm.OP_CHAR), expr.Token.Line)
 	return nil
 }
 
-// compileOrdExpression gera bytecode para ord()
 func (c *Compiler) compileOrdExpression(expr *parser.OrdExpression) error {
-	// 1. Emite OP_ORD
-	// A VM irá pausar, ler um char, e (push 65)
+	if err := c.compileExpression(expr.Argument); err != nil {
+		return err
+	}
+	c.discardType()
+	c.pushType(TYPE_NUMBER)
 	c.emitByte(byte(vm.OP_ORD), expr.Token.Line)
+	return nil
+}
+
+func (c *Compiler) compileToStringExpression(expr *parser.ToStringExpression) error {
+	if err := c.compileExpression(expr.Argument); err != nil {
+		return err
+	}
+	c.discardType()
+	c.pushType(TYPE_STRING)
+	c.emitByte(byte(vm.OP_TO_STRING), expr.Token.Line)
+	return nil
+}
+
+func (c *Compiler) compileToNumberExpression(expr *parser.ToNumberExpression) error {
+	if err := c.compileExpression(expr.Argument); err != nil {
+		return err
+	}
+	c.discardType()
+	c.pushType(TYPE_NUMBER)
+	c.emitByte(byte(vm.OP_TO_NUMBER), expr.Token.Line)
+	return nil
+}
+
+func (c *Compiler) compileExitStatement(stmt *parser.ExitStatement) error {
+	if err := c.compileExpression(stmt.Code); err != nil {
+		return err
+	}
+	c.discardType()
+	c.emitByte(byte(vm.OP_EXIT), stmt.Token.Line)
+	return nil
+}
+
+func (c *Compiler) compileReadFileExpression(expr *parser.ReadFileExpression) error {
+	if err := c.compileExpression(expr.Path); err != nil {
+		return err
+	}
+	pathType := c.popType()
+	if pathType != TYPE_STRING && pathType != TYPE_UNKNOWN {
+		return fmt.Errorf("'readFile' requer uma string como caminho, recebeu %s (Linha: %d)", pathType, expr.Token.Line)
+	}
+	c.pushType(TYPE_STRING)
+	c.emitByte(byte(vm.OP_READ_FILE), expr.Token.Line)
+	return nil
+}
+
+func (c *Compiler) compileWriteFileStatement(stmt *parser.WriteFileStatement) error {
+	if err := c.compileExpression(stmt.Path); err != nil {
+		return err
+	}
+	pathType := c.popType()
+	if pathType != TYPE_STRING && pathType != TYPE_UNKNOWN {
+		return fmt.Errorf("'writeFile' requer uma string como caminho, recebeu %s (Linha: %d)", pathType, stmt.Token.Line)
+	}
+	if err := c.compileExpression(stmt.Content); err != nil {
+		return err
+	}
+	contentType := c.popType()
+	if contentType != TYPE_STRING && contentType != TYPE_UNKNOWN {
+		return fmt.Errorf("'writeFile' requer uma string como conteúdo, recebeu %s (Linha: %d)", contentType, stmt.Token.Line)
+	}
+	c.emitByte(byte(vm.OP_WRITE_FILE), stmt.Token.Line)
 	return nil
 }

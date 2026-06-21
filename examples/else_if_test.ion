@@ -1,0 +1,17 @@
+begin program
+    display "--- Teste de Else If ---"
+
+    declare x: number := 2
+
+    if x == 1 then
+        display "x = 1"
+    else
+        if x == 2 then
+            display "x = 2 (else if)"
+        else
+            display "x nao e 1 nem 2"
+        endif
+    endif
+
+    display "Fim do teste"
+end program

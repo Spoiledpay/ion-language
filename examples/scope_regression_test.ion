@@ -1,0 +1,75 @@
+begin program
+    display "--- Teste de Regressao de Escopo (Bloco) ---"
+    declare ok: boolean := true
+
+    // 1. Shadowing: variável em bloco não afeta externa
+    declare x: number := 10
+    if x == 10 then
+        declare x: number := 99
+        if x != 99 then
+            ok := false
+        endif
+    endif
+    if x != 10 then
+        ok := false
+    endif
+
+    // 2. Variável local ao bloco não vaza
+    if true then
+        declare y: number := 42
+    endif
+    // y não deve ser acessível aqui (erro de compilação se tentar)
+    // Se y vazou, isso sobrescreveria x
+
+    // 3. While com declare interno
+    declare i: number := 0
+    while i < 3 do
+        declare z: number := i * 10
+        if z != i * 10 then
+            ok := false
+        endif
+        i := i + 1
+    end do
+    // z não deve vazar
+
+    // 4. For com declare interno
+    declare j: number
+    for j = 1 to 3 step 1
+        declare w: number := j * 100
+        if w != j * 100 then
+            ok := false
+        endif
+    next
+
+    // 5. If aninhados com declares
+    if true then
+        declare a: number := 1
+        if true then
+            declare b: number := 2
+            if a + b != 3 then
+                ok := false
+            endif
+        endif
+    endif
+
+    // 6. While aninhados com declares
+    declare m: number := 0
+    while m < 2 do
+        declare inner: number := 0
+        while inner < 2 do
+            declare val: number := m * 10 + inner
+            if val != m * 10 + inner then
+                ok := false
+            endif
+            inner := inner + 1
+        end do
+        m := m + 1
+    end do
+
+    if ok then
+        display "✅ Todos os testes de escopo passaram!"
+    else
+        display "❌ Alguns testes de escopo falharam!"
+    endif
+
+end program

@@ -1,0 +1,15 @@
+begin program
+    /* Structs serão implementadas em breve com suporte completo */
+    display "Usando map como alternativa a structs:"
+
+    declare pessoa: [string]string := map[string]string
+    pessoa["nome"] := "João"
+    pessoa["cidade"] := "São Paulo"
+    pessoa["idade"] := "30"
+
+    display "Nome: ", pessoa["nome"]
+    display "Cidade: ", pessoa["cidade"]
+    display "Idade: ", pessoa["idade"]
+
+    display "Struct/Map testado com sucesso!"
+end program

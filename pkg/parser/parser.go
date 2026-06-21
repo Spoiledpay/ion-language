@@ -23,18 +23,21 @@ const (
 
 // Mapa de precedências para os operadores V2
 var precedences = map[lexer.TokenType]int{
-	lexer.TOKEN_EQUAL_EQUAL: EQUALS,
-	lexer.TOKEN_NOT_EQUAL:   EQUALS,
-	lexer.TOKEN_LESS:        LESSGREATER,
-	lexer.TOKEN_GREATER:     LESSGREATER,
-	lexer.TOKEN_PLUS:        SUM,
-	lexer.TOKEN_MINUS:       SUM,
-	lexer.TOKEN_ASTERISK:    PRODUCT,
-	lexer.TOKEN_SLASH:       PRODUCT,
-	lexer.TOKEN_OR:          LOGICAL_OR,
-	lexer.TOKEN_AND:         LOGICAL_AND,
-	lexer.TOKEN_LPAREN:      CALL,
-	lexer.TOKEN_LBRACKET:    INDEX,
+	lexer.TOKEN_EQUAL_EQUAL:     EQUALS,
+	lexer.TOKEN_NOT_EQUAL:       EQUALS,
+	lexer.TOKEN_LESS:            LESSGREATER,
+	lexer.TOKEN_LESS_EQUAL:      LESSGREATER,
+	lexer.TOKEN_GREATER:         LESSGREATER,
+	lexer.TOKEN_GREATER_EQUAL:   LESSGREATER,
+	lexer.TOKEN_PLUS:            SUM,
+	lexer.TOKEN_MINUS:           SUM,
+	lexer.TOKEN_ASTERISK:        PRODUCT,
+	lexer.TOKEN_SLASH:           PRODUCT,
+	lexer.TOKEN_PERCENT:         PRODUCT,
+	lexer.TOKEN_OR:              LOGICAL_OR,
+	lexer.TOKEN_AND:             LOGICAL_AND,
+	lexer.TOKEN_LPAREN:          CALL,
+	lexer.TOKEN_LBRACKET:        INDEX,
 }
 
 type (
@@ -81,17 +84,23 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.TOKEN_ORD, p.parseOrdExpression)
 	p.registerPrefix(lexer.TOKEN_LEN, p.parseLenExpression)
 	p.registerPrefix(lexer.TOKEN_GET_BYTE_AT, p.parseGetByteAtExpression)
+	p.registerPrefix(lexer.TOKEN_TO_STRING, p.parseToStringExpression)
+	p.registerPrefix(lexer.TOKEN_TO_NUMBER, p.parseToNumberExpression)
+	p.registerPrefix(lexer.TOKEN_READ_FILE, p.parseReadFileExpression)
 
 	// --- Funções INFIX ---
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
 	p.registerInfix(lexer.TOKEN_GREATER, p.parseInfixExpression)
+	p.registerInfix(lexer.TOKEN_GREATER_EQUAL, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_LESS, p.parseInfixExpression)
+	p.registerInfix(lexer.TOKEN_LESS_EQUAL, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_EQUAL_EQUAL, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_NOT_EQUAL, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_PLUS, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_MINUS, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_ASTERISK, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_SLASH, p.parseInfixExpression)
+	p.registerInfix(lexer.TOKEN_PERCENT, p.parseInfixExpression)
 	p.registerInfix(lexer.TOKEN_AND, p.parseLogicalExpression)
 	p.registerInfix(lexer.TOKEN_OR, p.parseLogicalExpression)
 	p.registerInfix(lexer.TOKEN_LPAREN, p.parseCallExpression)
@@ -200,6 +209,14 @@ func (p *Parser) parseStatement() Statement {
 		return p.parseFunctionStatement()
 	case lexer.TOKEN_RETURN:
 		return p.parseReturnStatement()
+	case lexer.TOKEN_BREAK:
+		return &BreakStatement{Token: p.curToken}
+	case lexer.TOKEN_CONTINUE:
+		return &ContinueStatement{Token: p.curToken}
+	case lexer.TOKEN_EXIT:
+		return p.parseExitStatement()
+	case lexer.TOKEN_WRITE_FILE:
+		return p.parseWriteFileStatement()
 
 	default:
 		// Esta é a nova lógica V10.
@@ -235,16 +252,17 @@ func (p *Parser) parseCharExpression() Expression {
 	return expr
 }
 
-// parseOrdExpression analisa: ord()
+// parseOrdExpression analisa: ord(expr)
 func (p *Parser) parseOrdExpression() Expression {
 	expr := &OrdExpression{Token: p.curToken}
 
-	// 'ord()' não aceita argumentos, apenas parênteses vazios
-	if !p.expectPeek(lexer.TOKEN_LPAREN) { // '('
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
 	}
+	p.nextToken()
+	expr.Argument = p.parseExpression(LOWEST)
 
-	if !p.expectPeek(lexer.TOKEN_RPAREN) { // ')'
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		return nil
 	}
 
@@ -383,11 +401,13 @@ func (p *Parser) parseForStatement() *ForStatement {
 	p.nextToken() // Avança para a expressão 'end'
 	stmt.End = p.parseExpression(LOWEST)
 
-	if !p.expectPeek(lexer.TOKEN_STEP) {
-		return nil
+	if p.peekTokenIs(lexer.TOKEN_STEP) {
+		p.nextToken()
+		p.nextToken()
+		stmt.Step = p.parseExpression(LOWEST)
+	} else {
+		stmt.Step = &NumberLiteral{Token: lexer.Token{Line: p.curToken.Line}, Value: 1}
 	}
-	p.nextToken() // Avança para a expressão 'step'
-	stmt.Step = p.parseExpression(LOWEST)
 
 	// Analisa o corpo do loop
 	stmt.Body = []Statement{}
@@ -450,14 +470,22 @@ func (p *Parser) parseAssignmentOrExpressionStatement() Statement {
 	// 1. Analisa o lado esquerdo como uma expressão completa
 	leftExpr := p.parseExpression(LOWEST)
 
-	// 2. Verifica se o PRÓXIMO token é ':=', o que a torna uma atribuição
-	if p.peekTokenIs(lexer.TOKEN_ASSIGN) {
-		p.nextToken() // Consome o 'ASSIGN' (:=)
+	// 2. Verifica se o próximo token é operador de atribuição
+	assignTokens := map[lexer.TokenType]string{
+		lexer.TOKEN_ASSIGN:          ":=",
+		lexer.TOKEN_PLUS_ASSIGN:     "+=",
+		lexer.TOKEN_MINUS_ASSIGN:    "-=",
+		lexer.TOKEN_ASTERISK_ASSIGN: "*=",
+		lexer.TOKEN_SLASH_ASSIGN:    "/=",
+	}
+	if op, ok := assignTokens[p.peekToken.Type]; ok {
+		p.nextToken()
 		stmt := &AssignmentStatement{
-			Token: p.curToken, // O token :=
-			Left:  leftExpr,   // 'x' ou 'tape[10]'
+			Token:    p.curToken,
+			Left:     leftExpr,
+			Operator: op,
 		}
-		p.nextToken() // Consome o início da expressão do valor
+		p.nextToken()
 		stmt.Value = p.parseExpression(LOWEST)
 		return stmt
 	}
@@ -801,8 +829,7 @@ func (p *Parser) parseFunctionStatement() *FunctionStatement {
 	}
 	// curToken é '('
 
-	stmt.Parameters = p.parseFunctionParameters() // Helper para ler 'a, b, c'
-	// parseFunctionParameters consome o ')'
+	stmt.Parameters = p.parseFunctionParameters()
 
 	p.nextToken() // Avança para o início do corpo
 
@@ -829,31 +856,41 @@ func (p *Parser) parseFunctionStatement() *FunctionStatement {
 	return stmt
 }
 
-// parseFunctionParameters analisa os parâmetros (simplificado, V9)
-func (p *Parser) parseFunctionParameters() []*Identifier {
-	params := []*Identifier{}
+func (p *Parser) parseFunctionParameters() []Parameter {
+	params := []Parameter{}
 
-	// Caso 1: Sem parâmetros, ex: function()
 	if p.peekTokenIs(lexer.TOKEN_RPAREN) {
-		p.nextToken() // Consome ')'
+		p.nextToken()
 		return params
 	}
 
-	// Caso 2: Pelo menos um parâmetro
-	p.nextToken() // Avança para o primeiro IDENT
-	param := &Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	p.nextToken()
+	param := Parameter{
+		Name: &Identifier{Token: p.curToken, Value: p.curToken.Literal},
+	}
+	if p.peekTokenIs(lexer.TOKEN_COLON) {
+		p.nextToken()
+		p.nextToken()
+		param.Type = p.parseType()
+	}
 	params = append(params, param)
 
-	// Loop para parâmetros adicionais
 	for p.peekTokenIs(lexer.TOKEN_COMMA) {
-		p.nextToken() // Consome ','
-		p.nextToken() // Avança para o próximo IDENT
-		param := &Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		p.nextToken()
+		p.nextToken()
+		param := Parameter{
+			Name: &Identifier{Token: p.curToken, Value: p.curToken.Literal},
+		}
+		if p.peekTokenIs(lexer.TOKEN_COLON) {
+			p.nextToken()
+			p.nextToken()
+			param.Type = p.parseType()
+		}
 		params = append(params, param)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
-		return nil // Faltou ')'
+		return nil
 	}
 
 	return params
@@ -909,7 +946,55 @@ func (p *Parser) parseGetByteAtExpression() Expression {
 	return expr
 }
 
-// --- FIM DAS NOVAS FUNÇÕES V12.B ---
+func (p *Parser) parseToStringExpression() Expression {
+	expr := &ToStringExpression{Token: p.curToken}
+	if !p.expectPeek(lexer.TOKEN_LPAREN) { return nil }
+	p.nextToken()
+	expr.Argument = p.parseExpression(LOWEST)
+	if !p.expectPeek(lexer.TOKEN_RPAREN) { return nil }
+	return expr
+}
+
+func (p *Parser) parseToNumberExpression() Expression {
+	expr := &ToNumberExpression{Token: p.curToken}
+	if !p.expectPeek(lexer.TOKEN_LPAREN) { return nil }
+	p.nextToken()
+	expr.Argument = p.parseExpression(LOWEST)
+	if !p.expectPeek(lexer.TOKEN_RPAREN) { return nil }
+	return expr
+}
+
+func (p *Parser) parseReadFileExpression() Expression {
+	expr := &ReadFileExpression{Token: p.curToken}
+	if !p.expectPeek(lexer.TOKEN_LPAREN) { return nil }
+	p.nextToken()
+	expr.Path = p.parseExpression(LOWEST)
+	if !p.expectPeek(lexer.TOKEN_RPAREN) { return nil }
+	return expr
+}
+
+func (p *Parser) parseExitStatement() *ExitStatement {
+	stmt := &ExitStatement{Token: p.curToken}
+	if !p.expectPeek(lexer.TOKEN_LPAREN) { return nil }
+	p.nextToken()
+	stmt.Code = p.parseExpression(LOWEST)
+	if !p.expectPeek(lexer.TOKEN_RPAREN) { return nil }
+	return stmt
+}
+
+func (p *Parser) parseWriteFileStatement() *WriteFileStatement {
+	stmt := &WriteFileStatement{Token: p.curToken}
+	if !p.expectPeek(lexer.TOKEN_LPAREN) { return nil }
+	p.nextToken()
+	stmt.Path = p.parseExpression(LOWEST)
+	if !p.expectPeek(lexer.TOKEN_COMMA) {
+		p.newError("esperava ',' após o caminho em writeFile")
+		return nil
+	}
+	p.nextToken()
+	stmt.Content = p.parseExpression(LOWEST)
+	if !p.expectPeek(lexer.TOKEN_RPAREN) { return nil }
+	return stmt
+}
 
 // --- Funções Auxiliares de Verificação e Erro ---
-// ... (resto do arquivo)
